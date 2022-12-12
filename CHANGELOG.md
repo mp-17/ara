@@ -22,10 +22,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
  - Plot kernels-Vl performance plot
  - Print I$/D$ stall metrics
- - Add `spmv`, `conjugate_gradient`, and `gemv` kernels.
+ - Add `spmv`, `conjugate_gradient`, and `gemv`
  - Add MMU interface between Ara and CVA6
  - Add virtual->physical address translation for Ara by sharing CVA6 MMU
  - Add Ara VLSU support for MMU exceptions
+ - Add lavaMD `app`, benchmark, and performance plot
 
 ### Changed
 
