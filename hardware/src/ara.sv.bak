@@ -370,7 +370,7 @@ module ara import ara_pkg::*; #(
     .stu_operand_i              (stu_operand                                           ),
     .stu_operand_valid_i        (stu_operand_valid                                     ),
     .stu_operand_ready_o        (stu_operand_ready                                     ),
-    .stu_exception_o            ( stu_exception                                        ),
+    .stu_exception_o            ( stu_exception                                        )
     // Address Generation
     .addrgen_operand_i          (sldu_addrgen_operand                                  ),
     .addrgen_operand_target_fu_i(sldu_addrgen_operand_target_fu                        ),
