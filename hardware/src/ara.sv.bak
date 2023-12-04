@@ -370,7 +370,7 @@ module ara import ara_pkg::*; #(
     .stu_operand_i              (stu_operand                                           ),
     .stu_operand_valid_i        (stu_operand_valid                                     ),
     .stu_operand_ready_o        (stu_operand_ready                                     ),
-    .stu_exception_o            ( stu_exception                                        ),
+    .stu_exception_o            ( stu_exception                                        )
     // Address Generation
     .addrgen_operand_i          (sldu_addrgen_operand                                  ),
     .addrgen_operand_target_fu_i(sldu_addrgen_operand_target_fu                        ),
@@ -499,5 +499,17 @@ module ara import ara_pkg::*; #(
 
   if (ara_pkg::VLEN != 2**$clog2(ara_pkg::VLEN))
     $error("[ara] The vector length must be a power of two.");
+
+  if (RVVD(FPUSupport) && !ariane_pkg::RVD)
+    $error(
+      "[ara] Cannot support double-precision floating-point on Ara if Ariane does not support it.");
+
+  if (RVVF(FPUSupport) && !ariane_pkg::RVF)
+    $error(
+      "[ara] Cannot support single-precision floating-point on Ara if Ariane does not support it.");
+
+  if (RVVH(FPUSupport) && !ariane_pkg::XF16)
+    $error(
+      "[ara] Cannot support half-precision floating-point on Ara if Ariane does not support it.");
 
 endmodule : ara
