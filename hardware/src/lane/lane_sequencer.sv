@@ -21,6 +21,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
     input  logic                 [NrVInsn-1:0]            pe_vinsn_running_i,
     output logic                                          pe_req_ready_o,
     output pe_resp_t                                      pe_resp_o,
+    input  logic                                          need_mock_operand_i,
     // Interface with the operand requester
     output operand_request_cmd_t [NrOperandQueues-1:0]    operand_request_o,
     output logic                 [NrOperandQueues-1:0]    operand_request_valid_o,
@@ -54,20 +55,21 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
   pe_req_t pe_req;
   logic    pe_req_valid;
   logic    pe_req_ready;
+  logic    need_mock_operand;
 
   fall_through_register #(
-    .T(pe_req_t)
+    .T(logic [$bits(pe_req_t):0])
   ) i_pe_req_register (
-    .clk_i     (clk_i             ),
-    .rst_ni    (rst_ni            ),
-    .clr_i     (1'b0              ),
-    .testmode_i(1'b0              ),
-    .data_i    (pe_req_i          ),
-    .valid_i   (pe_req_valid_i_msk),
-    .ready_o   (pe_req_ready_o    ),
-    .data_o    (pe_req            ),
-    .valid_o   (pe_req_valid      ),
-    .ready_i   (pe_req_ready      )
+    .clk_i     (clk_i                          ),
+    .rst_ni    (rst_ni                         ),
+    .clr_i     (1'b0                           ),
+    .testmode_i(1'b0                           ),
+    .data_i    ({pe_req_i, need_mock_operand_i}),
+    .valid_i   (pe_req_valid_i_msk             ),
+    .ready_o   (pe_req_ready_o                 ),
+    .data_o    ({pe_req, need_mock_operand}    ),
+    .valid_o   (pe_req_valid                   ),
+    .ready_i   (pe_req_ready                   )
   );
 
   always_comb begin
@@ -488,7 +490,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           };
           // vl is not an integer multiple of NrLanes
           // I.e., ( ( pe_req.vl / NrLanes * NrLanes ) == vl ) <=> ( ( vl % NrLanes ) != 0 )
-          if ( ( operand_request[StA].vl * NrLanes ) != pe_req.vl ) begin : tweak_vl_StA
+          if (need_mock_operand || (lane_id_i < pe_req.vl[idx_width(NrLanes)-1:0])) begin : tweak_vl_StA
             operand_request[StA].vl += 1;
           end : tweak_vl_StA
           operand_request_push[StA] = pe_req.use_vs1;

@@ -37,10 +37,10 @@ module ara import ara_pkg::*; #(
     input  logic              scan_enable_i,
     input  logic              scan_data_i,
     output logic              scan_data_o,
-    
+
     // CSR input
     input  logic              en_ld_st_translation_i,
-    
+
     // Interface with CVA6's sv39 MMU
     // This is everything the MMU can provide, it might be overcomplete for Ara and some signals be useless
     output  ariane_pkg::exception_t        mmu_misaligned_ex_o,
@@ -140,6 +140,7 @@ module ara import ara_pkg::*; #(
   logic              [NrPEs-1:0]   pe_req_ready;
   logic              [NrVInsn-1:0] pe_vinsn_running;
   pe_resp_t          [NrPEs-1:0]   pe_resp;
+  logic              [NrLanes-1:0] need_mock_operand;
   // Interface with the address generator
   logic                            addrgen_ack;
   ariane_pkg::exception_t          addrgen_exception;
@@ -182,6 +183,7 @@ module ara import ara_pkg::*; #(
     .pe_resp_i             (pe_resp                  ),
     .alu_vinsn_done_i      (alu_vinsn_done[0]        ),
     .mfpu_vinsn_done_i     (mfpu_vinsn_done[0]       ),
+    .need_mock_operand_o   (need_mock_operand        ),
     // Interface with the operand requesters
     .global_hazard_table_o (global_hazard_table      ),
     // Interface with the lane 0
@@ -273,6 +275,7 @@ module ara import ara_pkg::*; #(
       .alu_vinsn_done_o                (alu_vinsn_done[lane]                ),
       .mfpu_vinsn_done_o               (mfpu_vinsn_done[lane]               ),
       .global_hazard_table_i           (global_hazard_table                 ),
+      .need_mock_operand_i             (need_mock_operand[lane]             ),
       // Interface with the slide unit
       .sldu_result_req_i               (sldu_result_req[lane]               ),
       .sldu_result_addr_i              (sldu_result_addr[lane]              ),
@@ -376,7 +379,7 @@ module ara import ara_pkg::*; #(
     .addrgen_operand_target_fu_i(sldu_addrgen_operand_target_fu                        ),
     .addrgen_operand_valid_i    (sldu_addrgen_operand_valid                            ),
     .addrgen_operand_ready_o    (addrgen_operand_ready                                 ),
-    // CSR input    
+    // CSR input
     .en_ld_st_translation_i,
     // Interface with CVA6's sv39 MMU
     .mmu_misaligned_ex_o   ,
