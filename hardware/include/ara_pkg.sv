@@ -368,6 +368,11 @@ package ara_pkg;
     // Rescale vl taking into account the new and old EEW
     logic scale_vl;
 
+    // The lane that provides the first element of the computation
+    logic [$clog2(MaxNrLanes)-1:0] start_lane;
+    // The lane that provides the last element of the computation
+    logic [$clog2(MaxNrLanes)-1:0] end_lane;
+
     // 1st vector register operand
     logic [4:0] vs1;
     logic use_vs1;
@@ -984,11 +989,11 @@ package ara_pkg;
     // Each vector register spans multiple words in each bank in each lane
     // The start address is the same in every lane
     // Therefore, within each lane, each vector register chunk starts on a given offset
-    vaddr = vid * (VLENB / NrLanes / NrVRFBanksPerLane); 
+    vaddr = vid * (VLENB / NrLanes / NrVRFBanksPerLane);
     // NOTE: the only extensively tested configuration of Ara keeps:
     //        - (VLEN / NrLanes) constant to 1024;
     //        - NrVRFBanksPerLane always equal to 8.
-    //        Given so, each vector register will span 2 words across all the banks and lanes, 
+    //        Given so, each vector register will span 2 words across all the banks and lanes,
     //        therefore, vaddr = vid * 16
   endfunction: vaddr
 
