@@ -50,6 +50,7 @@ module lane import ara_pkg::*; import rvv_pkg::*; #(
     output logic                                           alu_vinsn_done_o,
     output logic                                           mfpu_vinsn_done_o,
     input  logic                [NrVInsn-1:0][NrVInsn-1:0] global_hazard_table_i,
+    input  logic                                           need_mock_operand_i,
     // Interface with the Store unit
     output elen_t                                          stu_operand_o,
     output logic                                           stu_operand_valid_o,
@@ -145,6 +146,7 @@ module lane import ara_pkg::*; import rvv_pkg::*; #(
     .pe_vinsn_running_i     (pe_vinsn_running_i   ),
     .pe_req_ready_o         (pe_req_ready_o       ),
     .pe_resp_o              (pe_resp_o            ),
+    .need_mock_operand_i    (need_mock_operand_i  ),
     // Interface with the operand requesters
     .operand_request_o      (operand_request      ),
     .operand_request_valid_o(operand_request_valid),
