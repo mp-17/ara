@@ -32,8 +32,6 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     input  pe_resp_t            [NrPEs-1:0] pe_resp_i,
     input  logic                            alu_vinsn_done_i,
     input  logic                            mfpu_vinsn_done_i,
-    // Interface with the lanes
-    output logic              [NrLanes-1:0] need_mock_operand_o,
     // Interface with the operand requesters
     output logic [NrVInsn-1:0][NrVInsn-1:0] global_hazard_table_o,
     // Only the slide unit can answer with a scalar response
@@ -132,56 +130,78 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
 
   logic [NrVInsn-1:0][NrVInsn-1:0] global_hazard_table_d;
 
-  ///////////////////////
-  // Helper vstart, vl //
-  ///////////////////////
+  ////////////////////////
+  // Start and End lane //
+  ////////////////////////
 
-  // Some units outside the lanes, e.g., the store unit, need
+  // Some units outside the lanes, e.g., the store unit, always need
   // to receive operands from all the lanes. For this reason,
   // we need to know if each lane will need to fetch one operand
   // more (mock operand) to balance the other lane true operands.
-  // With vstart != 0, this operation is a bit harder to be done
-  // within the lanes without further help. Therefore, we prepare
-  // here a vector (need_mock_operand) to help each lane know
-  // if it needs a mock operand or not.
-  logic [NrLanes-1:0] need_mock_operand_d;
-  // Two ancillary vectors to build need_mock_operand_d
-  // vl_mock_op: from the MSB -> ones until vl % NrLanes (excluded)
-  // vstart_mock_op: from the LSB -> ones until vstart % NrLanes (excluded)
-  // Example 0: with 8 lanes, vl = 11, and vstart = 1
-  // vl_mock_op     = 11100000
-  // vstart_mock_op = 00000001
-  // need_mock_operand  = 11100001
-  // Example 1: with 8 lanes, vl = 15, and vstart = 1
-  // vl_mock_op     = 11111110
-  // vstart_mock_op = 00000001
-  // need_mock_operand  = 00000000
-  // Example 2: with 8 lanes, vl = 13, and vstart = 5
-  // vl_mock_op     = 11111000
-  // vstart_mock_op = 00011111
-  // need_mock_operand  = 00011000
-  logic [NrLanes-1:0] vl_mock_op, vstart_mock_op;
+  // With vstart != 0 and EW != 64bit, this operation is a harder to be done
+  // within the lanes without further help.
+  // Therefore, we calculate here the start and end lanes, i.e., the lanes
+  // that respectively will provide the first and last true element of
+  // the computation.
+  logic [$clog2(NrLanes)-1:0] start_lane, end_lane;
+  // Buffers to simplify the code reading
+  logic [$clog2(8*NrLanes)-1:0] buf8;
+  logic [$clog2(4*NrLanes)-1:0] buf16;
+  logic [$clog2(2*NrLanes)-1:0] buf32;
 
-  // Some magic to create the vector
   always_comb begin
-    need_mock_operand_d = '0;
-    vl_mock_op          = '0;
-    vstart_mock_op      = '0;
+    // No default values since we cover all the possible cases with default.
+    // Don't use zero to save some logic.
 
-    // Build ancillary vectors
-    for (int i = 0; i < NrLanes; i++) begin
-      if (i < pe_req_d.vl % NrLanes)
-        vl_mock_op[NrLanes-1-i] = 1'b1;
-      if (i < pe_req_d.vstart % NrLanes)
-        vstart_mock_op[i] = 1'b1;
-    end
+    // Start lane
+    // Number of elements in a single L*64-bit fetch: (NrLanes << (64 - pe_req_d.vtype.vsew)).
+    // vstart / (NrLanes << (64 - pe_req_d.vtype.vsew)) -> don't care.
+    // vstart % NrLanes -> our starting lane if:
+    // (vstart % (NrLanes << (64 - pe_req_d.vtype.vsew))) / NrLanes.
+    // Otherwise, the starting lane continues to be the 0th.
 
-    // Create need_mock_operand vector
-    if (&(vl_mock_op | vstart_mock_op))
-      need_mock_operand_d = vl_mock_op & vstart_mock_op;
-    else
-      need_mock_operand_d = vl_mock_op | vstart_mock_op;
-  end // always_comb
+    // End lane
+    // Number of elements in a single L*64-bit fetch: (NrLanes << (64 - pe_req_d.vtype.vsew)).
+    // vl / (NrLanes << (64 - pe_req_d.vtype.vsew)) -> don't care.
+    // (vl % NrLanes) - 1 -> our end lane if:
+    // (vl % (NrLanes << (64 - pe_req_d.vtype.vsew)) - 1) / NrLanes.
+    // With the end lane we should subtract 1 since vl represents a number of
+    // elements and NOT an index.
+    unique case (pe_req_d.vtype.vsew)
+      EW8: begin
+        start_lane = &pe_req_d.vstart[$clog2(8*NrLanes)-1:$clog2(NrLanes)]
+                   ? pe_req_d.vstart[$clog2(NrLanes)-1:0]
+                   : '0;
+        buf8       = pe_req_d.vl[$clog2(8*NrLanes)-1:0] - 1;
+        end_lane   = !(|buf8[$clog2(8*NrLanes)-1:$clog2(NrLanes)])
+                   ? pe_req_d.vl[$clog2(NrLanes)-1:0] - 1
+                   : '1;
+      end
+      EW16: begin
+        start_lane = &pe_req_d.vstart[$clog2(4*NrLanes)-1:$clog2(NrLanes)]
+                   ? pe_req_d.vstart[$clog2(NrLanes)-1:0]
+                   : '0;
+        buf16      = pe_req_d.vl[$clog2(4*NrLanes)-1:0] - 1;
+        end_lane   = !(|buf16[$clog2(4*NrLanes)-1:$clog2(NrLanes)])
+                   ? pe_req_d.vl[$clog2(NrLanes)-1:0] - 1
+                   : '1;
+      end
+      EW32: begin
+        start_lane = &pe_req_d.vstart[$clog2(2*NrLanes)-1:$clog2(NrLanes)]
+                   ? pe_req_d.vstart[$clog2(NrLanes)-1:0]
+                   : '0;
+        buf32      = pe_req_d.vl[$clog2(2*NrLanes)-1:0] - 1;
+        end_lane   = !(|buf32[$clog2(2*NrLanes)-1:$clog2(NrLanes)])
+                   ? pe_req_d.vl[$clog2(NrLanes)-1:0] - 1
+                   : '1;
+      end
+      // EW64, default
+      default: begin
+        start_lane = pe_req_d.vstart[$clog2(NrLanes)-1:0];
+        end_lane   = pe_req_d.vl[$clog2(NrLanes)-1:0] - 1;
+      end
+    endcase
+  end
 
   /////////////////
   //  Sequencer  //
@@ -409,6 +429,8 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
               wide_fp_imm   : ara_req_i.wide_fp_imm,
               cvt_resize    : ara_req_i.cvt_resize,
               scale_vl      : ara_req_i.scale_vl,
+              start_lane    : start_lane,
+              end_lane      : end_lane,
               vl            : ara_req_i.vl,
               vstart        : ara_req_i.vstart,
               vtype         : ara_req_i.vtype,
@@ -527,8 +549,6 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
       global_hazard_table_o <= '0;
 
       running_mask_insn_q <= 1'b0;
-
-      need_mock_operand_o <= '0;
     end else begin
       state_q <= state_d;
 
@@ -544,8 +564,6 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
       global_hazard_table_o <= global_hazard_table_d;
 
       running_mask_insn_q <= running_mask_insn_d;
-
-      need_mock_operand_o <= need_mock_operand_d;
     end
   end
 
