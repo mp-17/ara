@@ -489,7 +489,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           // extra operand regardless of whether it is valid in this lane or not.
           // This is done to balance the data received by the store unit, which expects
           // L*64-bits packets only.
-          if (lane_id_i < pe_req.start_lane || lane_id_i > pe_req.end_lane) begin : tweak_vl_StA
+          if (lane_id_i > pe_req.end_lane) begin : tweak_vl_StA
             operand_request[StA].vl += 1;
           end : tweak_vl_StA
           operand_request_push[StA] = pe_req.use_vs1;
