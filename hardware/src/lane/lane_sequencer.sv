@@ -265,12 +265,9 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
       // Calculate the start element for Lane[i]. This will be forwarded to both opqueues
       // and operand requesters, with some light modification in the case of a vslide.
       // Regardless of the EW, the start element of Lane[i] is "vstart / NrLanes".
-      // The remainder is distributed from lane[0] on.
-      vfu_operation_d.vstart = pe_req.vstart / NrLanes; // High bits
-      // If lane_id_i < (vstart % NrLanes), this lane needs to execute one micro-operation less.
-      if (lane_id_i < pe_req.vstart[idx_width(NrLanes)-1:0]) begin : adjust_vstart_lane
-        vfu_operation_d.vstart += 1;
-      end : adjust_vstart_lane
+      // If vstart deos not divide NrLanes perfectly, some low-index lanes will send
+      // mock data to balance the payload.
+      vfu_operation_d.vstart = pe_req.vstart / NrLanes;
 
       // Mark the vector instruction as running
       vinsn_running_d[pe_req.id] = (vfu_operation_d.vfu != VFU_None) ? 1'b1 : 1'b0;
