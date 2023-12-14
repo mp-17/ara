@@ -197,8 +197,6 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
   logic [$clog2(8*NrLanes)-1:0] vrf_word_start_byte;
   // First payload from the lanes? If yes, it can be offset by vstart.
   logic first_lane_payload_d, first_lane_payload_q;
-  // The index of the first lane with valid data when vstart != 0
-  logic [$clog2(NrLanes)-1:0] first_valid_lane_idx_d, first_valid_lane_idx_q;
 
   always_comb begin: p_vstu
     // NOTE: these are out here only for debug visibility, they could go in p_vldu as automatic variables
@@ -235,7 +233,6 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
 
     vrf_cnt_d = vrf_cnt_q;
     first_lane_payload_d = first_lane_payload_q;
-    first_valid_lane_idx_d = first_valid_lane_idx_q;
 
     // Inform the main sequencer if we are idle
     pe_req_ready_o = !vinsn_queue_full;
@@ -329,13 +326,7 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
           // Next payloads will not be affected by vstart anymore
           first_lane_payload_d = 1'b0;
           // Acknowledge the operands with the lanes
-          for (int unsigned lane = 0; lane < NrLanes; lane++) begin
-            if (lane >= first_valid_lane_idx_q) begin
-              stu_operand_ready[lane] = 1'b1;
-            end
-          end
-          // From now on, the valid elements come from lane 0 regardless of vstart
-          first_valid_lane_idx_d = '0;
+          stu_operand_ready = '1;
           // Acknowledge the mask operand
           mask_ready_o      = !vinsn_issue_q.vm;
           // Account for the results that were issued
@@ -378,9 +369,6 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
         first_payload_byte_d = (NrLanes * DataWidthB) - vrf_word_start_byte[$clog2(8*NrLanes)-1:0];
         // The next payload will be the first one for this store
         first_lane_payload_d = 1'b1;
-        // For the first payload, we need to handshake only the correct incoming operands.
-        // The lanes from the start lane to the last one have to be handshaked.
-        first_valid_lane_idx_d = vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].start_lane;
       end : issue_cnt_bytes_update
     end : axi_w_beat_finish
 
@@ -469,9 +457,6 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
         first_payload_byte_d = (NrLanes * DataWidthB) - vrf_word_start_byte[$clog2(8*NrLanes)-1:0];
         // The next payload will be the first one for this store
         first_lane_payload_d = 1'b1;
-        // For the first payload, we need to handshake only the correct incoming operands.
-        // The lanes from the start lane to the last one have to be handshaked.
-        first_valid_lane_idx_d = pe_req_i.start_lane;
       end
 
       // Bump pointers and counters of the vector instruction queue
@@ -495,7 +480,6 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
       first_lane_payload_q <= '0;
 
       vrf_cnt_q <= '0;
-      first_valid_lane_idx_q <= '0;
     end else begin
       vinsn_running_q   <= vinsn_running_d;
       issue_cnt_bytes_q <= issue_cnt_bytes_d;
@@ -509,7 +493,6 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
       first_lane_payload_q <= first_lane_payload_d;
 
       vrf_cnt_q <= vrf_cnt_d;
-      first_valid_lane_idx_q <= first_valid_lane_idx_d;
     end
   end
 
