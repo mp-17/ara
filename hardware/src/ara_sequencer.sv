@@ -150,8 +150,10 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   logic [$clog2(2*NrLanes)-1:0] buf32;
 
   always_comb begin
-    // No default values since we cover all the possible cases with default.
-    // Don't use zero to save some logic.
+    // start_lane and end_lane has default values in the unique case statement already
+    buf8       = '0;
+    buf16      = '0;
+    buf32      = '0;
 
     // Start lane
     // Number of elements in a single L*64-bit fetch: (NrLanes << (64 - pe_req_d.vtype.vsew)).
