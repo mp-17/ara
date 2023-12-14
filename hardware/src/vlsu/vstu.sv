@@ -267,7 +267,7 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
       // How many bytes are valid in this VRF word
       vrf_valid_bytes   = (NrLanes * DataWidthB) - vrf_pnt_q;
       // How many bytes are valid in this instruction
-      vinsn_valid_bytes = issue_cnt_bytes_q - vrf_pnt_q;
+      vinsn_valid_bytes = issue_cnt_bytes_q - vrf_cnt_q;
       // How many bytes are valid in this AXI word
       axi_valid_bytes   = upper_byte - lower_byte + 1;
 
@@ -322,7 +322,7 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
         end : beats_complete
 
         // We consumed a whole word from the lanes
-        if (vrf_pnt_d == NrLanes*8 || vrf_pnt_d == issue_cnt_bytes_q) begin : vrf_word_done
+        if (vrf_pnt_d == NrLanes*8 || vrf_cnt_d == issue_cnt_bytes_q) begin : vrf_word_done
           // Reset the pointer in the VRF word
           vrf_pnt_d         = '0;
           vrf_cnt_d         = '0;
@@ -370,7 +370,8 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
                         vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vstart
                       ) << unsigned'(vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vtype.vsew);
         // Prepare the VRF start pointer
-        vrf_word_start_byte = pe_req_i.vstart[$clog2(8*NrLanes)-1:0] << pe_req_i.vtype.vsew;
+        vrf_word_start_byte = vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vstart[$clog2(8*NrLanes)-1:0] <<
+          vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vtype.vsew;
         vrf_pnt_d           = {1'b0, vrf_word_start_byte[$clog2(8*NrLanes)-1:0]};
         vrf_cnt_d           = '0;
         // The first payload byte width for this vload
@@ -379,7 +380,7 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
         first_lane_payload_d = 1'b1;
         // For the first payload, we need to handshake only the correct incoming operands.
         // The lanes from the start lane to the last one have to be handshaked.
-        first_valid_lane_idx_d = vrf_word_start_byte[$clog2(8*NrLanes)-1:$clog2(8)];
+        first_valid_lane_idx_d = vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].start_lane;
       end : issue_cnt_bytes_update
     end : axi_w_beat_finish
 
@@ -470,7 +471,7 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
         first_lane_payload_d = 1'b1;
         // For the first payload, we need to handshake only the correct incoming operands.
         // The lanes from the start lane to the last one have to be handshaked.
-        first_valid_lane_idx_d = vrf_word_start_byte[$clog2(8*NrLanes)-1:$clog2(8)];
+        first_valid_lane_idx_d = pe_req_i.start_lane;
       end
 
       // Bump pointers and counters of the vector instruction queue
