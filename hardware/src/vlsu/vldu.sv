@@ -269,7 +269,7 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
         // How many bytes are valid in this VRF word
         automatic vlen_t vrf_valid_bytes   = (NrLanes * DataWidthB) - vrf_word_byte_pnt_q;
         // How many bytes are valid in this instruction
-        automatic vlen_t vinsn_valid_bytes = issue_cnt_bytes_q - vrf_word_byte_pnt_q;
+        automatic vlen_t vinsn_valid_bytes = issue_cnt_bytes_q - vrf_word_byte_cnt_q;
         // How many bytes are valid in this AXI word
         automatic vlen_t axi_valid_bytes   = upper_byte - lower_byte - axi_r_byte_pnt_q + 1;
 
@@ -329,7 +329,7 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
       end : operands_valid
 
       // We have a word ready to be sent to the lanes
-      if (vrf_word_byte_pnt_d == (NrLanes * DataWidthB) || vrf_word_byte_pnt_d == issue_cnt_bytes_q) begin : vrf_word_ready
+      if (vrf_word_byte_pnt_d == (NrLanes * DataWidthB) || vrf_word_byte_cnt_d == issue_cnt_bytes_q) begin : vrf_word_ready
         // Increment result queue pointers and counters
         result_queue_cnt_d += 1;
         if (result_queue_write_pnt_q == ResultQueueDepth-1) begin : result_queue_write_pnt_overflow
