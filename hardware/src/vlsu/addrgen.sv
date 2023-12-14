@@ -105,6 +105,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
     vew_e vew;
     logic is_load;
     logic is_burst; // Unit-strided instructions can be converted into AXI INCR bursts
+    vlen_t vstart;
   } addrgen_req_t;
   addrgen_req_t addrgen_req;
   logic         addrgen_req_valid;
@@ -123,7 +124,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
   logic             axi_addrgen_queue_full;
   logic             axi_addrgen_queue_empty;
   logic             axi_addrgen_queue_pop;
-  
+
   assign axi_addrgen_queue_pop = ldu_axi_addrgen_req_ready_i | stu_axi_addrgen_req_ready_i;
 
   fifo_v3 #(
@@ -295,19 +296,19 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
           addrgen_exception_o.tval  = '0;
         end : eew_misaligned_error
         else begin : address_valid
-          // NOTE: indexed are not covered here          
+          // NOTE: indexed are not covered here
           automatic logic [riscv::VLEN-1:0] vaddr_start;
 
           case ( pe_req_q.op )
             // Unit-stride: address = base + (vstart in elements)
-            VLE,  VSE : vaddr_start = pe_req_q.scalar_op + ( pe_req_q.vstart << unsigned'(pe_req_q.vtype.vsew) ); 
+            VLE,  VSE : vaddr_start = pe_req_q.scalar_op + ( pe_req_q.vstart << unsigned'(pe_req_q.vtype.vsew) );
             // Strided: address = base + (vstart * stride)
             // NOTE: this multiplier might cause some timing issues
             VLSE, VSSE: vaddr_start = pe_req_q.scalar_op + ( pe_req_q.vstart * pe_req_q.stride ) ;
             // Indexed: let the next stage take care of vstart
             VLXE, VSXE: vaddr_start = pe_req_q.scalar_op;
             default   : vaddr_start = '0;
-          endcase // pe_req_q.op 
+          endcase // pe_req_q.op
 
           addrgen_req = '{
             addr    : vaddr_start,
@@ -316,7 +317,8 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
             vew     : pe_req_q.vtype.vsew,
             is_load : is_load(pe_req_q.op),
             // Unit-strided loads/stores trigger incremental AXI bursts.
-            is_burst: (pe_req_q.op inside {VLE, VSE})
+            is_burst: (pe_req_q.op inside {VLE, VSE}),
+            vstart  : pe_req_q.vstart
           };
           addrgen_req_valid = 1'b1;
 
@@ -325,7 +327,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
             addrgen_ack_o     = 1'b1;
             state_d           = IDLE;
           end : finished
-          
+
           // If load/store translation is enabled
           if ( en_ld_st_translation_i ) begin : translation_enabled
             // We need to wait for the last translation to be over before acking back
@@ -347,20 +349,21 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
 
         // Every address can generate an exception
         addrgen_req = '{
-          addr    : pe_req_q.scalar_op, 
+          addr    : pe_req_q.scalar_op,
           len     : pe_req_q.vl - pe_req_q.vstart,
           stride  : pe_req_q.stride,
           vew     : pe_req_q.vtype.vsew,
           is_load : is_load(pe_req_q.op),
           // Unit-strided loads/stores trigger incremental AXI bursts.
-          is_burst: 1'b0
+          is_burst: 1'b0,
+          vstart  : pe_req_q.vstart
         };
         addrgen_req_valid = 1'b1;
 
         // Adjust valid signals to the next block "operands_ready"
         addrgen_operand_valid = addrgen_operand_valid_i;
         for ( int unsigned lane = 0; lane < NrLanes; lane++ ) begin : adjust_operand_valid
-          // - We are left with less byte than the maximim to issue, 
+          // - We are left with less byte than the maximim to issue,
           //    this means that at least one lane is not going to push us any operand anymore
           // - For the lanes which index % NrLanes != 0
           if ( ( ( idx_op_cnt_q << pe_req_q.vtype.vsew ) < (NrLanes * DataWidthB) )
@@ -370,7 +373,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
           end : vstart_lane_adjust
         end : adjust_operand_valid
         // TODO: apply the same vstart logic also to mask_valid_i
-    
+
         // Handle handshake and data between VRF and spill register
         // We accept all the incoming data, without any checks
         // since Ara stalls on an indexed memory operation
@@ -551,7 +554,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
   //////////////////////////////
 
   enum logic [2:0] {
-    AXI_ADDRGEN_IDLE, 
+    AXI_ADDRGEN_IDLE,
     AXI_ADDRGEN_AXI_DW_STORE_MISALIGNED,    // Misaligned vector store to AxiDataWidth/8, needs special treatement
     AXI_ADDRGEN_WAITING_CORE_STORE_PENDING, // Wait until (core_st_pending_i == 0)
     AXI_ADDRGEN_REQUESTING,                 // Perform AW/AR transactions and push addrgen_req to VSTU/VLDU
@@ -578,8 +581,8 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
       output axi_addr_t                                 aligned_end_addr,
       output axi_addr_t                                 aligned_next_start_addr
   );
-  
-    // POSSIBLE BUG: given this is really the maximum number of bytes per burst, 
+
+    // POSSIBLE BUG: given this is really the maximum number of bytes per burst,
     //                this assumes the burst length is always the maximum possible, i.e., 256.
     automatic int unsigned max_burst_bytes = addr + (256 << eff_axi_dw_log);
 
@@ -600,14 +603,14 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
   endfunction // set_end_addr
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  // Extend for MMU 
+  // Extend for MMU
   //  Simplifying assumptions:
   //    0. Just testing unit-stride for now. Strided and indexed should be strainghtforward, since they are zero-length bursts.
   //    1. One translation per AXI burst. This simplifies the implementation substantially, and might actually be necessary
   //       or anyway safer since, that page might not be in RAM for the subsequent bursts (especially vory long vectors).
   //       On the other hand, there are some downsides:
   //        1.1. If the contiguous virtual memory accessed by all the burst sits in the same physical page,
-  //              more translations than necessary are requested. 
+  //              more translations than necessary are requested.
   //        1.2. One cycle is wasted per burst.
   //        1.3. Increased MMU pressure, although the DTLB pressure itself should not be affected.
   //    2. The AR/W and R/W channels are used with a fifo (i_addrgen_req_queue).
@@ -655,11 +658,11 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
     // For addrgen FSM
     last_translation_completed = 1'b0;
 
-    case (axi_addrgen_state_q) 
+    case (axi_addrgen_state_q)
       AXI_ADDRGEN_IDLE: begin : axi_addrgen_state_AXI_ADDRGEN_IDLE
         // Clear exception buffer
         mmu_exception_d = '0;
-        
+
         if (addrgen_req_valid) begin
           axi_addrgen_d       = addrgen_req;
           axi_addrgen_state_d = core_st_pending_i ? AXI_ADDRGEN_WAITING_CORE_STORE_PENDING : AXI_ADDRGEN_REQUESTING;
@@ -667,8 +670,14 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
           // In case of a misaligned store, reduce the effective width of the AXI transaction,
           // since the store unit does not support misalignments between the AXI bus and the lanes
           // BUG: this address check is not valid for indexed operations
-          if ((axi_addrgen_d.addr[clog2_AxiStrobeWidth-1:0] != '0) && !axi_addrgen_d.is_load)
-          begin
+          if (axi_addrgen_d.vstart != 0 && !axi_addrgen_d.is_load) begin
+            // vstart > 0 can create problems similar to the ones a misalignment would create.
+            // Limit the effective AXI bus width to the element width to avoid problems.
+            axi_addrgen_state_d = AXI_ADDRGEN_AXI_DW_STORE_MISALIGNED;
+
+            eff_axi_dw_d     = 1 << axi_addrgen_d.vew;
+            eff_axi_dw_log_d = axi_addrgen_d.vew;
+          end else if ((axi_addrgen_d.addr[clog2_AxiStrobeWidth-1:0] != '0) && !axi_addrgen_d.is_load) begin
             // Calculate the start and the end addresses in the AXI_ADDRGEN_AXI_DW_STORE_MISALIGNED state
             axi_addrgen_state_d = AXI_ADDRGEN_AXI_DW_STORE_MISALIGNED;
 
@@ -715,7 +724,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
                         aligned_start_addr_d,
                         aligned_end_addr_d,
                         aligned_next_start_addr_d
-        );            
+        );
       end : axi_addrgen_state_AXI_ADDRGEN_AXI_DW_STORE_MISALIGNED
 
       AXI_ADDRGEN_WAITING_CORE_STORE_PENDING: begin : axi_addrgen_state_AXI_ADDRGEN_WAITING_CORE_STORE_PENDING
@@ -735,7 +744,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
         // Otherwise, the ordering of the responses is not guaranteed, and with the current
         // implementation we can incur in deadlocks
         // NOTE: this might be referring to an obsolete axi_cut implementation
-        if ( axi_addrgen_queue_empty || 
+        if ( axi_addrgen_queue_empty ||
             (axi_addrgen_req_o.is_load && axi_addrgen_q.is_load) ||
             (~axi_addrgen_req_o.is_load && ~axi_addrgen_q.is_load
             )
@@ -752,11 +761,11 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
               mmu_req_o           = 1'b1;
               mmu_vaddr_o         = (state_q == ADDRGEN_IDX_OP) ? idx_final_vaddr_q : axi_addrgen_q.addr;
               mmu_is_store_o      = !axi_addrgen_q.is_load;
-            end : translation_req   
+            end : translation_req
             // Either we got a valid address translation from the MMU
-            // or virtual memory is disabled 
-            else if ( (mmu_valid_i & !mmu_exception_i.valid) 
-                      | !en_ld_st_translation_i 
+            // or virtual memory is disabled
+            else if ( (mmu_valid_i & !mmu_exception_i.valid)
+                      | !en_ld_st_translation_i
                     ) begin : paddr_valid
               if (axi_addrgen_q.is_burst) begin : unit_stride
                 /////////////////////////
@@ -898,8 +907,8 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
                 //////////////////////
                 //  Indexed access  //
                 //////////////////////
-                
-                // TODO: check if idx_vaddr_valid_q is stable 
+
+                // TODO: check if idx_vaddr_valid_q is stable
                 if (idx_vaddr_valid_q) begin : idx_vaddr_valid_q
 
                   // Check if the virtual address generates an exception
@@ -916,7 +925,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
                   else begin : aligned_vaddress
                     // Mux target address
                     idx_final_paddr = ( en_ld_st_translation_i ) ? mmu_paddr_i : idx_final_vaddr_q;
-                    
+
                     // We consumed a word
                     idx_vaddr_ready_d = 1'b1;
 
@@ -996,17 +1005,17 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
 
       // AXI_ADDRGEN_WAIT_TRANSLATION : begin : axi_addrgen_state_AXI_ADDRGEN_WAIT_TRANSLATION
       //   // keep request high
-      //   mmu_req_o      = 1'b1;       
+      //   mmu_req_o      = 1'b1;
       //   mmu_vaddr_o    = axi_addrgen_q.addr; // use old address
       //   mmu_is_store_o = !axi_addrgen_q.is_load;
 
       //   // Wait for MMU to respond
       //   if ( mmu_valid_i ) begin : mmu_valid
       //     // Pull down the request
-      //     mmu_req_o      = 1'b0;   
+      //     mmu_req_o      = 1'b0;
 
-      //     // Mark the request as served    
-      //     // mmu_valid_d    = 1'b1;       
+      //     // Mark the request as served
+      //     // mmu_valid_d    = 1'b1;
 
       //     // Replace virtual address with translated address
       //     axi_addrgen_d.addr = mmu_paddr_i;
