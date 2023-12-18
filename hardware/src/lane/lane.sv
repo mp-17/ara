@@ -309,8 +309,14 @@ module lane import ara_pkg::*; import rvv_pkg::*; #(
   logic sldu_addrgen_operand_opqueues_valid;
 
   // Cut stu_exception path
-  logic stu_exception_q;
-  `FF(stu_exception_q, stu_exception_i, 1'b0, clk_i, rst_ni);
+  logic stu_exception;
+  logic [StuExLat:0] stu_exception_d, stu_exception_q;
+  assign stu_exception_d[0] = stu_exception_i;
+  assign stu_exception      = StuExLat == 0 ? stu_exception_i : stu_exception_q[StuExLat-1];
+  for (genvar i = 0; i < StuExLat; i++) begin
+    assign stu_exception_d[i+1] = stu_exception_q[i];
+    `FF(stu_exception_q[i], stu_exception_d[i], 1'b0, clk_i, rst_ni);
+  end
 
   operand_queues_stage #(
     .NrLanes   (NrLanes   ),
@@ -340,7 +346,7 @@ module lane import ara_pkg::*; import rvv_pkg::*; #(
     .stu_operand_o                    (stu_operand_o                      ),
     .stu_operand_valid_o              (stu_operand_valid_o                ),
     .stu_operand_ready_i              (stu_operand_ready_i                ),
-    .stu_exception_i                  (stu_exception_q                    ),
+    .stu_exception_i                  (stu_exception                      ),
     // Address Generation Unit
     .sldu_addrgen_operand_o           (sldu_addrgen_operand_opqueues      ),
     .sldu_addrgen_operand_target_fu_o (sldu_addrgen_operand_target_fu_o   ),
