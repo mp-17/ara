@@ -9,6 +9,7 @@
 module ara_system import axi_pkg::*; import ara_pkg::*; #(
     // RVV Parameters
     parameter int                      unsigned NrLanes            = 0,                               // Number of parallel vector lanes.
+    parameter int                      unsigned NrGroups           = 0,                               // Number of Ara instances
     // Support for floating-point data types
     parameter fpu_support_e                     FPUSupport         = FPUSupportHalfSingleDouble,
     // External support for vfrec7, vfrsqrt7
@@ -21,7 +22,8 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     parameter int                      unsigned AxiAddrWidth       = 64,
     parameter int                      unsigned AxiIdWidth         = 6,
     parameter int                      unsigned AxiNarrowDataWidth = 64,
-    parameter int                      unsigned AxiWideDataWidth   = 64*NrLanes/2,
+    parameter int                      unsigned AxiWideDataWidth   = 64*NrLanes*NrGroups/2,
+    parameter int                      unsigned GrpAxiDataWidth    = 64*NrLanes/2,
     parameter type                              ariane_axi_ar_t    = logic,
     parameter type                              ariane_axi_r_t     = logic,
     parameter type                              ariane_axi_aw_t    = logic,
@@ -36,6 +38,15 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     parameter type                              ara_axi_b_t        = logic,
     parameter type                              ara_axi_req_t      = logic,
     parameter type                              ara_axi_resp_t     = logic,
+
+    parameter type                              grp_axi_ar_t       = logic,
+    parameter type                              grp_axi_r_t        = logic,
+    parameter type                              grp_axi_aw_t       = logic,
+    parameter type                              grp_axi_w_t        = logic,
+    parameter type                              grp_axi_b_t        = logic,
+    parameter type                              grp_axi_req_t      = logic,
+    parameter type                              grp_axi_resp_t     = logic,
+    
     parameter type                              system_axi_ar_t    = logic,
     parameter type                              system_axi_r_t     = logic,
     parameter type                              system_axi_aw_t    = logic,
@@ -202,8 +213,11 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
 `endif
   );
 
+`ifndef USE_CLUSTER
+
   ara #(
     .NrLanes     (NrLanes         ),
+    .NrGroups    (1               ),
     .FPUSupport  (FPUSupport      ),
     .FPExtSupport(FPExtSupport    ),
     .FixPtSupport(FixPtSupport    ),
@@ -227,6 +241,45 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     .axi_req_o       (ara_axi_req   ),
     .axi_resp_i      (ara_axi_resp  )
   );
+
+`else
+
+  ara_cluster #(
+    .NrLanes     (NrLanes         ),
+    .NrGroups       (NrGroups),
+    .FPUSupport  (FPUSupport      ),
+    .FPExtSupport(FPExtSupport    ),
+    .FixPtSupport(FixPtSupport    ),
+    .AxiDataWidth(AxiWideDataWidth),
+    .AxiAddrWidth(AxiAddrWidth    ),
+    .GrpAxiDataWidth(GrpAxiDataWidth),
+    .axi_ar_t    (ara_axi_ar_t    ),
+    .axi_r_t     (ara_axi_r_t     ),
+    .axi_aw_t    (ara_axi_aw_t    ),
+    .axi_w_t     (ara_axi_w_t     ),
+    .axi_b_t     (ara_axi_b_t     ),
+    .axi_req_t   (ara_axi_req_t   ),
+    .axi_resp_t  (ara_axi_resp_t  ), 
+    .grp_axi_ar_t    (grp_axi_ar_t    ),
+    .grp_axi_r_t     (grp_axi_r_t     ),
+    .grp_axi_aw_t    (grp_axi_aw_t    ),
+    .grp_axi_w_t     (grp_axi_w_t     ),
+    .grp_axi_b_t     (grp_axi_b_t     ),
+    .grp_axi_req_t   (grp_axi_req_t   ),
+    .grp_axi_resp_t  (grp_axi_resp_t  )
+  ) i_ara_cluster (
+    .clk_i           (clk_i         ),
+    .rst_ni          (rst_ni        ),
+    .scan_enable_i   (scan_enable_i ),
+    .scan_data_i     (1'b0          ),
+    .scan_data_o     (/* Unused */  ),
+    .acc_req_i       (acc_req       ),
+    .acc_resp_o      (acc_resp      ),
+    .axi_req_o       (ara_axi_req   ),
+    .axi_resp_i      (ara_axi_resp  )
+  );
+
+`endif
 
   axi_mux #(
     .SlvAxiIDWidth(AxiIdWidth       ),

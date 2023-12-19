@@ -107,6 +107,10 @@ vlog_args += -work $(library)
 # Bender
 # Defines
 bender_defs += --define NR_LANES=$(nr_lanes) --define VLEN=$(vlen) --define ARIANE_ACCELERATOR_PORT=1
+ifneq ($(nr_groups), 0)
+	bender_defs += --define USE_CLUSTER=1 --define NR_GROUPS=$(nr_groups)
+endif
+
 # Targets
 bender_common_targs := -t rtl -t cv64a6_imafdcv_sv39 -t tech_cells_generic_include_tc_sram -t tech_cells_generic_include_tc_clk
 bender_targs_simc     := $(bender_common_targs) -t ara_test -t cva6_test

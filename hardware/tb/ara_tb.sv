@@ -29,12 +29,19 @@ module ara_tb;
   localparam NrLanes = 0;
   `endif
 
+  `ifdef NR_GROUPS
+  localparam NrGroups = `NR_GROUPS;
+  `else
+  localparam NrGroups = 0; 
+  `endif
+
   localparam ClockPeriod  = 1ns;
   // Axi response delay [ps]
   localparam int unsigned AxiRespDelay = 200;
 
   localparam AxiAddrWidth      = 64;
-  localparam AxiWideDataWidth  = 64 * NrLanes / 2;
+  localparam AxiWideDataWidth  = 32 * NrLanes * NrGroups;
+  localparam GrpAxiDataWidth   = 32 * NrLanes;
   localparam AxiWideBeWidth    = AxiWideDataWidth / 8;
   localparam AxiWideByteOffset = $clog2(AxiWideBeWidth);
 
@@ -78,8 +85,10 @@ module ara_tb;
   `ifndef VERILATOR
   ara_testharness #(
     .NrLanes     (NrLanes         ),
+    .NrGroups    (NrGroups        ),
     .AxiAddrWidth(AxiAddrWidth    ),
     .AxiDataWidth(AxiWideDataWidth),
+    .GrpAxiDataWidth(GrpAxiDataWidth),
     .AxiRespDelay(AxiRespDelay    )
   ) dut (
     .clk_i (clk  ),
@@ -167,10 +176,17 @@ module ara_tb;
     $display("Dump results on %s", OutResultFile);
   end
 
+  /*
   assign ara_w       = dut.i_ara_soc.i_system.i_ara.i_vlsu.axi_req.w.data;
   assign ara_w_strb  = dut.i_ara_soc.i_system.i_ara.i_vlsu.axi_req.w.strb;
   assign ara_w_valid = dut.i_ara_soc.i_system.i_ara.i_vlsu.axi_req.w_valid;
   assign ara_w_ready = dut.i_ara_soc.i_system.i_ara.i_vlsu.axi_resp.w_ready;
+  */
+
+  assign ara_w       = dut.i_ara_soc.i_system.i_ara_cluster.axi_req_o.w.data;
+  assign ara_w_strb  = dut.i_ara_soc.i_system.i_ara_cluster.axi_req_o.w.strb;
+  assign ara_w_valid = dut.i_ara_soc.i_system.i_ara_cluster.axi_req_o.w_valid;
+  assign ara_w_ready = dut.i_ara_soc.i_system.i_ara_cluster.axi_resp_i.w_ready;
 
 `ifndef IDEAL_DISPATCHER
   assign dump_en_mask = dut.i_ara_soc.hw_cnt_en_o[0];

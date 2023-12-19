@@ -49,6 +49,7 @@ sources:
     - hardware/src/vlsu/addrgen.sv
     - hardware/src/vlsu/vldu.sv
     - hardware/src/vlsu/vstu.sv
+    - hardware/src/vlsu/global_ldst.sv
     # Level 2
     - hardware/src/lane/operand_queues_stage.sv
     - hardware/src/lane/valu.sv
@@ -62,8 +63,10 @@ sources:
     # Level 5
     - hardware/src/ara.sv
     # Level 6
-    - hardware/src/ara_system.sv
+    - hardware/src/ara_cluster.sv
     # Level 7
+    - hardware/src/ara_system.sv
+    # Level 8
     - hardware/src/ara_soc.sv
 
     - target: ara_test

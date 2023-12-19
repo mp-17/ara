@@ -9,6 +9,7 @@
 module ara_soc import axi_pkg::*; import ara_pkg::*; #(
     // RVV Parameters
     parameter  int           unsigned NrLanes      = 0,                          // Number of parallel vector lanes.
+    parameter  int           unsigned NrGroups     = 0,                          // Number of Ara instances
     // Support for floating-point data types
     parameter  fpu_support_e          FPUSupport   = FPUSupportHalfSingleDouble,
     // External support for vfrec7, vfrsqrt7
@@ -16,7 +17,8 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
     // Support for fixed-point data types
     parameter  fixpt_support_e        FixPtSupport = FixedPointEnable,
     // AXI Interface
-    parameter  int           unsigned AxiDataWidth = 32*NrLanes,
+    parameter  int           unsigned AxiDataWidth = 32*NrLanes*NrGroups,
+    parameter  int           unsigned GrpAxiDataWidth = 32*NrLanes,
     parameter  int           unsigned AxiAddrWidth = 64,
     parameter  int           unsigned AxiUserWidth = 1,
     parameter  int           unsigned AxiIdWidth   = 5,
@@ -29,7 +31,13 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
     localparam type                   axi_strb_t   = logic [AxiDataWidth/8-1:0],
     localparam type                   axi_addr_t   = logic [AxiAddrWidth-1:0],
     localparam type                   axi_user_t   = logic [AxiUserWidth-1:0],
-    localparam type                   axi_id_t     = logic [AxiIdWidth-1:0]
+    localparam type                   axi_id_t     = logic [AxiIdWidth-1:0],
+
+    localparam type                   grp_axi_data_t   = logic [GrpAxiDataWidth-1:0],
+    localparam type                   grp_axi_strb_t   = logic [GrpAxiDataWidth/8-1:0],
+    localparam type                   grp_axi_addr_t   = logic [AxiAddrWidth-1:0],
+    localparam type                   grp_axi_user_t   = logic [AxiUserWidth-1:0],
+    localparam type                   grp_axi_id_t     = logic [AxiIdWidth-1:0]
   ) (
     input  logic        clk_i,
     input  logic        rst_ni,
@@ -109,6 +117,8 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
     axi_user_t)
   `AXI_TYPEDEF_ALL(soc_wide, axi_addr_t, axi_soc_id_t, axi_data_t, axi_strb_t, axi_user_t)
   `AXI_LITE_TYPEDEF_ALL(soc_narrow_lite, axi_addr_t, axi_narrow_data_t, axi_narrow_strb_t)
+
+  `AXI_TYPEDEF_ALL(ara_grp_axi, grp_axi_addr_t, axi_core_id_t, grp_axi_data_t, grp_axi_strb_t, grp_axi_user_t)
 
   // Buses
   system_req_t  system_axi_req_spill;
@@ -468,6 +478,7 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
 `ifndef TARGET_GATESIM
   ara_system #(
     .NrLanes           (NrLanes              ),
+    .NrGroups          (NrGroups             ),
     .FPUSupport        (FPUSupport           ),
     .FPExtSupport      (FPExtSupport         ),
     .FixPtSupport      (FixPtSupport         ),
@@ -476,6 +487,7 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .AxiIdWidth        (AxiCoreIdWidth       ),
     .AxiNarrowDataWidth(AxiNarrowDataWidth   ),
     .AxiWideDataWidth  (AxiDataWidth         ),
+    .GrpAxiDataWidth   (GrpAxiDataWidth      ),
     .ara_axi_ar_t      (ara_axi_ar_chan_t    ),
     .ara_axi_aw_t      (ara_axi_aw_chan_t    ),
     .ara_axi_b_t       (ara_axi_b_chan_t     ),
@@ -483,6 +495,15 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .ara_axi_w_t       (ara_axi_w_chan_t     ),
     .ara_axi_req_t     (ara_axi_req_t        ),
     .ara_axi_resp_t    (ara_axi_resp_t       ),
+
+    .grp_axi_ar_t      (ara_grp_axi_ar_chan_t    ),
+    .grp_axi_aw_t      (ara_grp_axi_aw_chan_t    ),
+    .grp_axi_b_t       (ara_grp_axi_b_chan_t     ),
+    .grp_axi_r_t       (ara_grp_axi_r_chan_t     ),
+    .grp_axi_w_t       (ara_grp_axi_w_chan_t     ),
+    .grp_axi_req_t     (ara_grp_axi_req_t        ),
+    .grp_axi_resp_t    (ara_grp_axi_resp_t       ),
+    
     .ariane_axi_ar_t   (ariane_axi_ar_chan_t ),
     .ariane_axi_aw_t   (ariane_axi_aw_chan_t ),
     .ariane_axi_b_t    (ariane_axi_b_chan_t  ),
@@ -546,6 +567,9 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
 
   if (NrLanes == 0)
     $error("[ara_soc] Ara needs to have at least one lane.");
+  
+  if (NrGroups == 0)
+    $error("[ara_soc] Ara needs to have atleast one group");
 
   if (AxiDataWidth == 0)
     $error("[ara_soc] The AXI data width must be greater than zero.");

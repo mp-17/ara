@@ -8,4 +8,6 @@ onerror {resume}
 quietly WaveActivateNextPane {} 0
 
 # Add Ara's waveforms
-do ../scripts/wave_ara_ideal.tcl
+for {set grp 0}  {$grp < [examine -radix dec ara_tb.NrGroups]} {incr grp} {
+	do ../scripts/wave_ara_ideal.tcl $grp
+}

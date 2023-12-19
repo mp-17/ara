@@ -10,11 +10,14 @@
 module ara_testharness #(
     // Ara-specific parameters
     parameter int unsigned NrLanes      = 0,
+    parameter int unsigned NrGroups     = 0,
     // AXI Parameters
     parameter int unsigned AxiUserWidth = 1,
     parameter int unsigned AxiIdWidth   = 5,
     parameter int unsigned AxiAddrWidth = 64,
     parameter int unsigned AxiDataWidth = 64*NrLanes/2,
+    parameter int unsigned GrpAxiDataWidth = 64*NrLanes*NrGroups/2,
+
     // AXI Resp Delay [ps] for gate-level simulation
     parameter int unsigned AxiRespDelay = 200
   ) (
@@ -67,8 +70,10 @@ module ara_testharness #(
 
   ara_soc #(
     .NrLanes     (NrLanes      ),
+    .NrGroups    (NrGroups     ),
     .AxiAddrWidth(AxiAddrWidth ),
     .AxiDataWidth(AxiDataWidth ),
+    .GrpAxiDataWidth(GrpAxiDataWidth),
     .AxiIdWidth  (AxiIdWidth   ),
     .AxiUserWidth(AxiUserWidth ),
     .AxiRespDelay(AxiRespDelay )
@@ -152,12 +157,14 @@ module ara_testharness #(
     runtime_cnt_en_d = runtime_cnt_en_q;
     // If disabled
     if (!runtime_cnt_en_q)
-      // Start only if the software allowed the enable and we detect the first V instruction
-      runtime_cnt_en_d = i_ara_soc.i_system.i_ara.acc_req_i.req_valid & cnt_en_mask;
+      // Start only if the software allowed the enable and we detect the first V instruction 
+      // runtime_cnt_en_d = i_ara_soc.i_system.i_ara.acc_req_i.req_valid & cnt_en_mask;
+      runtime_cnt_en_d = i_ara_soc.i_system.i_ara_cluster.acc_req_i.req_valid & cnt_en_mask; // TODO : Verify this!
     // If enabled
     if (runtime_cnt_en_q)
       // Stop counting only if the software disabled the counter and Ara returned idle
-      runtime_cnt_en_d = cnt_en_mask | ~i_ara_soc.i_system.i_ara.ara_idle;
+      // runtime_cnt_en_d = cnt_en_mask | ~i_ara_soc.i_system.i_ara.ara_idle;
+      runtime_cnt_en_d = cnt_en_mask | ~i_ara_soc.i_system.i_ara_cluster.p_cluster[0].i_ara.ara_idle; // TODO : Verify this!
   end
 
   // Vector runtime counter
@@ -177,14 +184,18 @@ module ara_testharness #(
     runtime_to_be_updated_d = runtime_to_be_updated_q;
 
     // Assert the update flag upon a new valid vector instruction
-    if (!runtime_to_be_updated_q && i_ara_soc.i_system.i_ara.acc_req_i.req_valid) begin
+    // if (!runtime_to_be_updated_q && i_ara_soc.i_system.i_ara.acc_req_i.req_valid) begin
+    if (!runtime_to_be_updated_q && i_ara_soc.i_system.i_ara_cluster.acc_req_i.req_valid) begin
       runtime_to_be_updated_d = 1'b1;
     end
 
     // Update the internal runtime and reset the update flag
+    // if (runtime_to_be_updated_q           &&
+    //     i_ara_soc.i_system.i_ara.ara_idle &&
+    //     !i_ara_soc.i_system.i_ara.acc_req_i.req_valid) begin
     if (runtime_to_be_updated_q           &&
-        i_ara_soc.i_system.i_ara.ara_idle &&
-        !i_ara_soc.i_system.i_ara.acc_req_i.req_valid) begin
+        i_ara_soc.i_system.i_ara_cluster.p_cluster[0].i_ara.ara_idle &&
+        !i_ara_soc.i_system.i_ara_cluster.acc_req_i.req_valid) begin
       runtime_buf_d = runtime_cnt_q;
       runtime_to_be_updated_d = 1'b0;
     end
@@ -238,9 +249,12 @@ module ara_testharness #(
   // Update logic
   always_comb begin
     // Update the internal runtime and reset the update flag
+    // if (runtime_to_be_updated_q           &&
+    //     i_ara_soc.i_system.i_ara.ara_idle &&
+    //     !i_ara_soc.i_system.i_ara.acc_req_i.req_valid) begin
     if (runtime_to_be_updated_q           &&
-        i_ara_soc.i_system.i_ara.ara_idle &&
-        !i_ara_soc.i_system.i_ara.acc_req_i.req_valid) begin
+        i_ara_soc.i_system.i_ara_cluster.p_cluster[0].i_ara.ara_idle &&
+        !i_ara_soc.i_system.i_ara_cluster.acc_req_i.req_valid) begin
       dcache_stall_buf_d = dcache_stall_cnt_q;
       icache_stall_buf_d = icache_stall_cnt_q;
       sb_full_buf_d      = sb_full_cnt_q;

@@ -10,6 +10,7 @@
 
 module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
     parameter int           unsigned NrLanes      = 0,
+    parameter int           unsigned NrGroups      = 0,
     // Support for floating-point data types
     parameter fpu_support_e          FPUSupport   = FPUSupportHalfSingleDouble,
     // External support for vfrec7, vfrsqrt7
@@ -487,7 +488,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   endcase
 
                   if (insn.vsetivli_type.func2 == 2'b11) begin // vsetivli
-                    vl_d = vlen_t'(insn.vsetivli_type.uimm5);
+                    vl_d = vlen_t'(insn.vsetivli_type.uimm5) >> $clog2(NrGroups);
                   end else begin // vsetvl || vsetvli
                     if (insn.vsetvl_type.rs1 == '0 && insn.vsetvl_type.rd == '0) begin
                       // Do not update the vector length
@@ -498,7 +499,8 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     end else begin
                       // Normal stripmining
                       vl_d = ((|acc_req_i.rs1[$bits(acc_req_i.rs1)-1:$bits(vl_d)]) ||
-                        (vlen_t'(acc_req_i.rs1) > vlmax)) ? vlmax : vlen_t'(acc_req_i.rs1);
+                        ((vlen_t'(acc_req_i.rs1) >> $clog2(NrGroups)) > vlmax)) ? vlmax : (vlen_t'(acc_req_i.rs1) >> 
+                        $clog2(NrGroups));
                     end
                   end
                 end
