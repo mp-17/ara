@@ -18,7 +18,8 @@ module global_ldst #(
   parameter type axi_resp_t                   = logic,
   
   localparam int size_axi                 = $clog2(AxiDataWidth)-3,
-  localparam int numShuffleStages         = $clog2(AxiDataWidth/(8*NrLanes))-1
+  localparam int numShuffleStages         = $clog2(AxiDataWidth/(8*NrLanes))-1,
+  localparam logic is_full_bw             = (NrClusters == (AxiDataWidth/ClusterAxiDataWidth)) ? 1'b1 : 1'b0 
   ) (
   input  logic                           clk_i,
   input  logic                           rst_ni,
@@ -131,17 +132,16 @@ always_comb begin : p_global_ldst
   axi_req_data_d = axi_req_data_q;
   
   w_valid_d = w_valid_q;
-  // If start pointer is Cluster-0, i am ready to receive data
-  w_ready_d = (cluster_start_wr_q==0) ? 1'b1 : w_ready_q;
+  w_ready_d = w_ready_q;
   // If we are ready to receive data, receive new request
   // otherwise assign previous request state.
-  axi_req_data_d = (cluster_start_wr_q==0) & w_ready_q ? axi_req_i : axi_req_data_q;
-  w_last_d = (cluster_start_wr_q==0) ? axi_req_i[0].w.last : w_last_q;
+  axi_req_data_d = w_ready_q ? axi_req_i : axi_req_data_q;
+  w_last_d = w_ready_q ? axi_req_i[0].w.last : w_last_q;
 
   if (axi_req_i[0].w_valid) begin : p_valid_write_data
     // If Total BW of all clusters == System AXI BW, we can support full write
     // BW, otherwise set not ready to receive data.
-    w_ready_d = (NrClusters == (AxiDataWidth/ClusterAxiDataWidth)) ? axi_resp_i.w_ready : 1'b0;
+    w_ready_d = is_full_bw ? axi_resp_i.w_ready : 1'b0;
     w_valid_d = 1'b1;
   end : p_valid_write_data
 
