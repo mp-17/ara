@@ -24,15 +24,16 @@
 #include <stdio.h>
 #endif
 
-extern double v64a[] __attribute__((aligned(32 * NR_LANES * NR_GROUPS), section(".l2")));
-extern double v64b[] __attribute__((aligned(32 * NR_LANES * NR_GROUPS), section(".l2")));
-extern float v32a[] __attribute__((aligned(32 * NR_LANES * NR_GROUPS), section(".l2")));
-extern float v32b[] __attribute__((aligned(32 * NR_LANES * NR_GROUPS), section(".l2")));
-extern _Float16 v16a[] __attribute__((aligned(32 * NR_LANES * NR_GROUPS), section(".l2")));
-extern _Float16 v16b[] __attribute__((aligned(32 * NR_LANES * NR_GROUPS), section(".l2")));
+extern double v64a[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern double v64b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern float v32a[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern float v32b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern _Float16 v16a[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern _Float16 v16b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern int vsize;
 
 int main() {
-	int vl, avl=64;
+	int vl, avl=vsize; //(1024*NR_CLUSTERS*NR_LANES)/(32);
 	asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(avl));
 	printf("vl:%d\n",vl);
 	float *a_ = (float *) v32a;

@@ -10,13 +10,13 @@
 module ara_testharness #(
     // Ara-specific parameters
     parameter int unsigned NrLanes      = 0,
-    parameter int unsigned NrGroups     = 0,
+    parameter int unsigned NrClusters   = 0,
     // AXI Parameters
-    parameter int unsigned AxiUserWidth = 1,
-    parameter int unsigned AxiIdWidth   = 5,
-    parameter int unsigned AxiAddrWidth = 64,
-    parameter int unsigned AxiDataWidth = 64*NrLanes/2,
-    parameter int unsigned GrpAxiDataWidth = 64*NrLanes*NrGroups/2,
+    parameter int unsigned AxiUserWidth        = 1,
+    parameter int unsigned AxiIdWidth          = 5,
+    parameter int unsigned AxiAddrWidth        = 64,
+    parameter int unsigned AxiDataWidth        = 64*NrLanes/2,
+    parameter int unsigned ClusterAxiDataWidth = 64*NrLanes*NrClusters/2,
 
     // AXI Resp Delay [ps] for gate-level simulation
     parameter int unsigned AxiRespDelay = 200
@@ -70,10 +70,10 @@ module ara_testharness #(
 
   ara_soc #(
     .NrLanes     (NrLanes      ),
-    .NrGroups    (NrGroups     ),
+    .NrClusters  (NrClusters   ),
     .AxiAddrWidth(AxiAddrWidth ),
     .AxiDataWidth(AxiDataWidth ),
-    .GrpAxiDataWidth(GrpAxiDataWidth),
+    .ClusterAxiDataWidth(ClusterAxiDataWidth),
     .AxiIdWidth  (AxiIdWidth   ),
     .AxiUserWidth(AxiUserWidth ),
     .AxiRespDelay(AxiRespDelay )
@@ -148,7 +148,7 @@ module ara_testharness #(
   // the last vector instruciton is over.
   logic cnt_en_mask;
 `ifndef IDEAL_DISPATCHER
-  assign cnt_en_mask = i_ara_soc.hw_cnt_en_o[0];
+  assign cnt_en_mask = 1'b1; //i_ara_soc.hw_cnt_en_o[0];
 `else
   assign cnt_en_mask = 1'b1;
 `endif
@@ -164,7 +164,7 @@ module ara_testharness #(
     if (runtime_cnt_en_q)
       // Stop counting only if the software disabled the counter and Ara returned idle
       // runtime_cnt_en_d = cnt_en_mask | ~i_ara_soc.i_system.i_ara.ara_idle;
-      runtime_cnt_en_d = cnt_en_mask | ~i_ara_soc.i_system.i_ara_cluster.p_cluster[0].i_ara.ara_idle; // TODO : Verify this!
+      runtime_cnt_en_d = cnt_en_mask & ~i_ara_soc.i_system.i_ara_cluster.p_cluster[0].i_ara.ara_idle; // TODO : Verify this!
   end
 
   // Vector runtime counter

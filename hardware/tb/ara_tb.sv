@@ -29,19 +29,19 @@ module ara_tb;
   localparam NrLanes = 0;
   `endif
 
-  `ifdef NR_GROUPS
-  localparam NrGroups = `NR_GROUPS;
+  `ifdef NR_CLUSTERS
+  localparam NrClusters = `NR_CLUSTERS;
   `else
-  localparam NrGroups = 0; 
+  localparam NrClusters = 0;
   `endif
 
   localparam ClockPeriod  = 1ns;
   // Axi response delay [ps]
   localparam int unsigned AxiRespDelay = 200;
 
-  localparam AxiAddrWidth      = 64;
-  localparam AxiWideDataWidth  = 32 * NrLanes * NrGroups;
-  localparam GrpAxiDataWidth   = 32 * NrLanes;
+  localparam AxiAddrWidth          = 64;
+  localparam AxiWideDataWidth      = 32 * NrLanes * NrClusters;
+  localparam ClusterAxiDataWidth   = 32 * NrLanes;
   localparam AxiWideBeWidth    = AxiWideDataWidth / 8;
   localparam AxiWideByteOffset = $clog2(AxiWideBeWidth);
 
@@ -85,10 +85,10 @@ module ara_tb;
   `ifndef VERILATOR
   ara_testharness #(
     .NrLanes     (NrLanes         ),
-    .NrGroups    (NrGroups        ),
+    .NrClusters  (NrClusters      ),
     .AxiAddrWidth(AxiAddrWidth    ),
     .AxiDataWidth(AxiWideDataWidth),
-    .GrpAxiDataWidth(GrpAxiDataWidth),
+    .ClusterAxiDataWidth(ClusterAxiDataWidth),
     .AxiRespDelay(AxiRespDelay    )
   ) dut (
     .clk_i (clk  ),

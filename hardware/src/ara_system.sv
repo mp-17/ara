@@ -9,7 +9,7 @@
 module ara_system import axi_pkg::*; import ara_pkg::*; #(
     // RVV Parameters
     parameter int                      unsigned NrLanes            = 0,                               // Number of parallel vector lanes.
-    parameter int                      unsigned NrGroups           = 0,                               // Number of Ara instances
+    parameter int                      unsigned NrClusters         = 0,                               // Number of Ara instances
     // Support for floating-point data types
     parameter fpu_support_e                     FPUSupport         = FPUSupportHalfSingleDouble,
     // External support for vfrec7, vfrsqrt7
@@ -19,11 +19,11 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     // Ariane configuration
     parameter ariane_pkg::ariane_cfg_t          ArianeCfg          = ariane_pkg::ArianeDefaultConfig,
     // AXI Interface
-    parameter int                      unsigned AxiAddrWidth       = 64,
-    parameter int                      unsigned AxiIdWidth         = 6,
-    parameter int                      unsigned AxiNarrowDataWidth = 64,
-    parameter int                      unsigned AxiWideDataWidth   = 64*NrLanes*NrGroups/2,
-    parameter int                      unsigned GrpAxiDataWidth    = 64*NrLanes/2,
+    parameter int                      unsigned AxiAddrWidth           = 64,
+    parameter int                      unsigned AxiIdWidth             = 6,
+    parameter int                      unsigned AxiNarrowDataWidth     = 64,
+    parameter int                      unsigned AxiWideDataWidth       = 64*NrLanes*NrClusters/2,
+    parameter int                      unsigned ClusterAxiDataWidth    = 64*NrLanes/2,
     parameter type                              ariane_axi_ar_t    = logic,
     parameter type                              ariane_axi_r_t     = logic,
     parameter type                              ariane_axi_aw_t    = logic,
@@ -39,13 +39,13 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     parameter type                              ara_axi_req_t      = logic,
     parameter type                              ara_axi_resp_t     = logic,
 
-    parameter type                              grp_axi_ar_t       = logic,
-    parameter type                              grp_axi_r_t        = logic,
-    parameter type                              grp_axi_aw_t       = logic,
-    parameter type                              grp_axi_w_t        = logic,
-    parameter type                              grp_axi_b_t        = logic,
-    parameter type                              grp_axi_req_t      = logic,
-    parameter type                              grp_axi_resp_t     = logic,
+    parameter type                              cluster_axi_ar_t       = logic,
+    parameter type                              cluster_axi_r_t        = logic,
+    parameter type                              cluster_axi_aw_t       = logic,
+    parameter type                              cluster_axi_w_t        = logic,
+    parameter type                              cluster_axi_b_t        = logic,
+    parameter type                              cluster_axi_req_t      = logic,
+    parameter type                              cluster_axi_resp_t     = logic,
     
     parameter type                              system_axi_ar_t    = logic,
     parameter type                              system_axi_r_t     = logic,
@@ -217,7 +217,7 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
 
   ara #(
     .NrLanes     (NrLanes         ),
-    .NrGroups    (1               ),
+    .NrClusters    (1               ),
     .FPUSupport  (FPUSupport      ),
     .FPExtSupport(FPExtSupport    ),
     .FixPtSupport(FixPtSupport    ),
@@ -246,13 +246,13 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
 
   ara_cluster #(
     .NrLanes     (NrLanes         ),
-    .NrGroups       (NrGroups),
+    .NrClusters  (NrClusters      ),
     .FPUSupport  (FPUSupport      ),
     .FPExtSupport(FPExtSupport    ),
     .FixPtSupport(FixPtSupport    ),
     .AxiDataWidth(AxiWideDataWidth),
     .AxiAddrWidth(AxiAddrWidth    ),
-    .GrpAxiDataWidth(GrpAxiDataWidth),
+    .ClusterAxiDataWidth(ClusterAxiDataWidth),
     .axi_ar_t    (ara_axi_ar_t    ),
     .axi_r_t     (ara_axi_r_t     ),
     .axi_aw_t    (ara_axi_aw_t    ),
@@ -260,13 +260,13 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     .axi_b_t     (ara_axi_b_t     ),
     .axi_req_t   (ara_axi_req_t   ),
     .axi_resp_t  (ara_axi_resp_t  ), 
-    .grp_axi_ar_t    (grp_axi_ar_t    ),
-    .grp_axi_r_t     (grp_axi_r_t     ),
-    .grp_axi_aw_t    (grp_axi_aw_t    ),
-    .grp_axi_w_t     (grp_axi_w_t     ),
-    .grp_axi_b_t     (grp_axi_b_t     ),
-    .grp_axi_req_t   (grp_axi_req_t   ),
-    .grp_axi_resp_t  (grp_axi_resp_t  )
+    .cluster_axi_ar_t    (cluster_axi_ar_t    ),
+    .cluster_axi_r_t     (cluster_axi_r_t     ),
+    .cluster_axi_aw_t    (cluster_axi_aw_t    ),
+    .cluster_axi_w_t     (cluster_axi_w_t     ),
+    .cluster_axi_b_t     (cluster_axi_b_t     ),
+    .cluster_axi_req_t   (cluster_axi_req_t   ),
+    .cluster_axi_resp_t  (cluster_axi_resp_t  )
   ) i_ara_cluster (
     .clk_i           (clk_i         ),
     .rst_ni          (rst_ni        ),

@@ -107,8 +107,8 @@ vlog_args += -work $(library)
 # Bender
 # Defines
 bender_defs += --define NR_LANES=$(nr_lanes) --define VLEN=$(vlen) --define ARIANE_ACCELERATOR_PORT=1
-ifneq ($(nr_groups), 0)
-	bender_defs += --define USE_CLUSTER=1 --define NR_GROUPS=$(nr_groups)
+ifneq ($(nr_clusters), 0)
+	bender_defs += --define USE_CLUSTER=1 --define NR_CLUSTERS=$(nr_clusters)
 endif
 
 # Targets

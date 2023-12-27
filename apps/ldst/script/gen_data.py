@@ -66,12 +66,12 @@ res16 = 0
 # Print information on file
 print(".section .data,\"aw\",@progbits")
 emit("vsize", np.array(vsize, dtype=np.uint64))
-emit("v64a", v64a, 'NR_LANES*NR_GROUPS*4')
-emit("v64b", v64b, 'NR_LANES*NR_GROUPS*4')
-emit("v32a", v32a, 'NR_LANES*NR_GROUPS*4')
-emit("v32b", v32b, 'NR_LANES*NR_GROUPS*4')
-emit("v16a", v16a, 'NR_LANES*NR_GROUPS*4')
-emit("v16b", v16b, 'NR_LANES*NR_GROUPS*4')
+emit("v64a", v64a, 'NR_LANES*NR_CLUSTERS*4')
+emit("v64b", v64b, 'NR_LANES*NR_CLUSTERS*4')
+emit("v32a", v32a, 'NR_LANES*NR_CLUSTERS*4')
+emit("v32b", v32b, 'NR_LANES*NR_CLUSTERS*4')
+emit("v16a", v16a, 'NR_LANES*NR_CLUSTERS*4')
+emit("v16b", v16b, 'NR_LANES*NR_CLUSTERS*4')
 # emit("gold64", np.array(gold64, dtype=np.float64));
 # emit("gold32", np.array(gold32, dtype=np.float32));
 # emit("gold16", gold16, 'NR_LANES*4');

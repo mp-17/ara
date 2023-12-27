@@ -11,8 +11,8 @@ quietly WaveActivateNextPane {} 0
 do ../scripts/wave_core.tcl
 
 # Add Ara's waveforms
-for {set grp 0}  {$grp < [examine -radix dec ara_tb.NrGroups]} {incr grp} {
-    do ../scripts/wave_ara.tcl $grp
+for {set cluster 0}  {$cluster < [examine -radix dec ara_tb.NrClusters]} {incr cluster} {
+    do ../scripts/wave_ara.tcl $cluster
 }
 
 add wave -noupdate -group Global /ara_tb/dut/i_ara_soc/i_system/i_ara_cluster/i_global_ldst/*
