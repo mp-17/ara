@@ -8,7 +8,9 @@
 // instructions, which need access to the whole Vector Register File.
 
 module sldu import ara_pkg::*; import rvv_pkg::*; #(
-    parameter  int  unsigned NrLanes = 0,
+    parameter  int  unsigned NrLanes   = 0,
+    parameter  int  unsigned NrClusters= 0,
+    parameter  int  unsigned ClusterId = 0,
     parameter  type          vaddr_t = logic, // Type used to address vector register file elements
     // Dependant parameters. DO NOT CHANGE!
     localparam int  unsigned DataWidth = $bits(elen_t), // Width of the lane datapath
@@ -41,7 +43,16 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     // Interface with the Mask Unit
     input  strb_t    [NrLanes-1:0] mask_i,
     input  logic     [NrLanes-1:0] mask_valid_i,
-    output logic                   mask_ready_o
+    output logic                   mask_ready_o,
+    // Interface with Ring Interconnect
+    output elen_t sldu_ring_o,
+    output logic  sldu_ring_valid_o, 
+    input  logic  sldu_ring_ready_i, 
+
+    input  elen_t sldu_ring_i,
+    input  logic  sldu_ring_valid_i,
+    output logic  sldu_ring_ready_o
+
   );
 
   `include "common_cells/registers.svh"
@@ -124,8 +135,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   // indicate with `payload_t` we are currently writing into (write_pnt),
   // and one pointer to indicate which `payload_t` we are currently
   // reading from and writing into the lanes (read_pnt).
-  logic     [idx_width(ResultQueueDepth)-1:0]   result_queue_write_pnt_d, result_queue_write_pnt_q;
-  logic     [idx_width(ResultQueueDepth)-1:0]   result_queue_read_pnt_d, result_queue_read_pnt_q;
+  logic     [idx_width(ResultQueueDepth)-1:0]   result_queue_write_pnt_d, result_queue_write_pnt_q, result_queue_write_pnt_q1, result_queue_write_pnt_q2;
+  logic     [idx_width(ResultQueueDepth)-1:0]   result_queue_read_pnt_d, result_queue_read_pnt_q, result_queue_read_pnt_q1, result_queue_read_pnt_q2;
   // We need to count how many valid elements are there in this result queue.
   logic     [idx_width(ResultQueueDepth):0]     result_queue_cnt_d, result_queue_cnt_q;
   // Vector to register the final grants from the operand requesters, which indicate
@@ -171,6 +182,10 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   logic [NrLanes-1:0]  sldu_operand_valid_d;
   logic [NrLanes-1:0]  sldu_operand_ready_q;
 
+  elen_t [NrLanes-1:0] sldu_operand_i_1;
+  logic [NrLanes-1:0]  sldu_operand_valid_i_1;
+  logic [NrLanes-1:0]  sldu_operand_ready_q_1;
+
   typedef enum logic {
     NP2_BUFFER_PNT,
     NP2_RESULT_PNT
@@ -186,6 +201,22 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
 
   for (genvar l = 0; l < NrLanes; l++) begin
+
+    if (ClusterId==NrClusters-1) begin 
+      spill_register #(
+        .T(elen_t)
+      ) i_sldu_spill_register_1 (
+        .clk_i  (clk_i                      ),
+        .rst_ni (rst_ni                     ),
+        .valid_i(sldu_operand_valid_i[l]    ),
+        .ready_o(sldu_operand_ready_q_1[l]    ),
+        .data_i (sldu_operand_i[l]          ),
+        .valid_o(sldu_operand_valid_i_1[l]      ),
+        .ready_i(sldu_operand_ready_q[l]      ),
+        .data_o (sldu_operand_i_1[l]            )
+      );
+    end
+
     spill_register #(
       .T(elen_t)
     ) i_sldu_spill_register (
@@ -199,21 +230,35 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       .data_o (sldu_operand[l]            )
     );
 
-    assign sldu_operand_d[l] = np2_loop_mux_sel_q == NP2_EXT_SEL
-                             ? sldu_operand_i[l]
-                             : result_queue_q[NP2_BUFFER_PNT][l].wdata;
-
-    assign sldu_operand_valid_d[l] = (sldu_operand_target_fu_q[l] == ALU_SLDU)
-                                   ? (np2_loop_mux_sel_q == NP2_EXT_SEL
-                                     ? sldu_operand_valid_i[l]
-                                     : slide_np2_buf_valid_q)
-                                   : 1'b0;
-
-    assign sldu_operand_ready_o[l] = (sldu_operand_target_fu_q[l] == ALU_SLDU)
-                                   ? (np2_loop_mux_sel_q == NP2_EXT_SEL
-                                     ? sldu_operand_ready_q[l]
-                                     : 1'b0)
-                                   : 1'b0;
+    if (ClusterId != NrClusters-1) begin
+      assign sldu_operand_d[l] = np2_loop_mux_sel_q == NP2_EXT_SEL
+                                        ? sldu_operand_i[l]
+                                        : result_queue_q[NP2_BUFFER_PNT][l].wdata;
+      assign sldu_operand_valid_d[l] = (sldu_operand_target_fu_q[l] == ALU_SLDU)
+                                        ? (np2_loop_mux_sel_q == NP2_EXT_SEL
+                                        ? sldu_operand_valid_i[l]
+                                        : slide_np2_buf_valid_q)
+                                        : 1'b0;
+      assign sldu_operand_ready_o[l] = (sldu_operand_target_fu_q[l] == ALU_SLDU)
+                                        ? (np2_loop_mux_sel_q == NP2_EXT_SEL
+                                        ? sldu_operand_ready_q[l]
+                                        : 1'b0)
+                                        : 1'b0;
+    end else begin
+      assign sldu_operand_d[l] = np2_loop_mux_sel_q == NP2_EXT_SEL
+                                        ? sldu_operand_i_1[l]
+                                        : result_queue_q[NP2_BUFFER_PNT][l].wdata;
+      assign sldu_operand_valid_d[l] = (sldu_operand_target_fu_q[l] == ALU_SLDU)
+                                        ? (np2_loop_mux_sel_q == NP2_EXT_SEL
+                                        ? sldu_operand_valid_i_1[l]
+                                        : slide_np2_buf_valid_q)
+                                        : 1'b0;
+      assign sldu_operand_ready_o[l] = (sldu_operand_target_fu_q[l] == ALU_SLDU)
+                                        ? (np2_loop_mux_sel_q == NP2_EXT_SEL
+                                        ? sldu_operand_ready_q_1[l]
+                                        : 1'b0)
+                                        : 1'b0;
+    end
   end
 
   assign sldu_operand_target_fu_d = sldu_operand_target_fu_i;
@@ -365,7 +410,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     SLIDE_NP2_SETUP,
     SLIDE_NP2_RUN,
     SLIDE_NP2_COMMIT,
-    SLIDE_NP2_WAIT
+    SLIDE_NP2_WAIT,
+    SLIDE_WAIT_1CLOCK
   } slide_state_e;
   slide_state_e state_d, state_q;
 
@@ -386,6 +432,48 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   // Remaining bytes of the current instruction in the commit phase
   vlen_t commit_cnt_d, commit_cnt_q;
 
+  ////////////////////////////////
+  /////// Ring Interconnect///////
+  ////////////////////////////////
+
+  elen_t scalar_shift_data_q, scalar_shift_data_d;
+  elen_t ring_data_prev_d, ring_data_prev_q;
+  logic ring_data_prev_valid_d, ring_data_prev_valid_q;
+
+  always_comb begin
+    ring_data_prev_d = ring_data_prev_q;
+    ring_data_prev_valid_d = ring_data_prev_valid_q;
+
+    // We have a valid input ring data
+    if (sldu_ring_valid_i & sldu_ring_ready_o) begin
+      // Store it into ring_data_prev_d for use by the last cluster.
+      ring_data_prev_d = sldu_ring_i;
+      ring_data_prev_valid_d = 1'b1;
+    end
+
+    // Set ring out data
+    // As long as we have a valid input operand we set valid out to 1
+    if (state_q == SLIDE_RUN) begin
+      if (sld_dir==0) begin // Slidedown
+        // Move 64-bits of data from Lane-0 to the lower id clusters
+        sldu_ring_o = sldu_operand_i[0];
+        sldu_ring_valid_o = sldu_operand_valid_i[0];
+      end
+    end
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin : proc_ring
+    if(~rst_ni) begin
+      ring_data_prev_q <= '0;
+      ring_data_prev_valid_q <= 1'b0;
+      scalar_shift_data_q <= '0;
+    end else begin
+      ring_data_prev_q <= ring_data_prev_d;
+      ring_data_prev_valid_q <= ring_data_prev_valid_d;
+      scalar_shift_data_q <= scalar_shift_data_d;
+    end
+  end
+  
   always_comb begin: p_sldu
     // Maintain state
     vinsn_queue_d = vinsn_queue_q;
@@ -417,6 +505,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     mask_ready_d       = 1'b0;
     sldu_operand_ready = '0;
 
+
     red_stride_cnt_d = red_stride_cnt_q;
 
     p2_stride_gen_stride_d = '0;
@@ -441,6 +530,10 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     sld_slamt   = (vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu})
                 ? red_stride_cnt_q
                 : stride_t'(vinsn_issue_q.stride >> vinsn_issue_q.vtype.vsew);
+
+    // Ring Interconnect states
+    scalar_shift_data_d = scalar_shift_data_q;
+    sldu_ring_ready_o = 1'b0;
 
     /////////////////
     //  Slide FSM  //
@@ -476,22 +569,16 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
                 state_d = SLIDE_RUN_VSLIDE1UP_FIRST_WORD;
             end
             VSLIDEDOWN: begin
+              // -> Supporting only slides by 1 for now.
               // vslidedown starts reading the source operand from the slide offset
-              in_pnt_d  = vinsn_issue_q.stride[idx_width(8*NrLanes)-1:0];
+              in_pnt_d  = 0; // vinsn_issue_q.stride[idx_width(8*NrLanes)-1:0];
               // vslidedown starts writing the destination vector at its beginning
               out_pnt_d = '0;
 
               // Initialize counters
               issue_cnt_d = vinsn_issue_q.vl << int'(vinsn_issue_q.vtype.vsew);
+              output_limit_d = issue_cnt_d;
 
-              // Initialize be-enable-generation ancillary signals
-              output_limit_d = vinsn_issue_q.use_scalar_op
-                             ? issue_cnt_d - (1 << int'(vinsn_issue_q.vtype.vsew))
-                             : issue_cnt_d;
-
-              // Trim the last element of vslide1down, which does not come from the VRF
-              if (vinsn_issue_q.use_scalar_op)
-                issue_cnt_d -= 1 << int'(vinsn_issue_q.vtype.vsew);
             end
             // Ordered sum reductions
             VFREDOSUM, VFWREDOSUM: begin
@@ -560,9 +647,39 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
           end
 
           // Bump pointers (reductions always finish in one shot)
-          in_pnt_d    = vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu} ? NrLanes * 8                  : in_pnt_q  + byte_count;
-          out_pnt_d   = vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu} ? NrLanes * 8                  : out_pnt_q + byte_count;
-          issue_cnt_d = vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu} ? issue_cnt_q - (NrLanes * 8)  : issue_cnt_q - byte_count;
+          // Handling data from/to the Ring Interconnect
+          if (sldu_ring_valid_i) begin
+            // We have a valid ring packet
+            if (ClusterId == NrClusters-1) begin
+              // For the last cluster we need to have the current ring packet and the previous ring packet.
+              if (ring_data_prev_valid_q) begin 
+                // If previous ring packet is also valid, we can push to the result queue and update pointers.
+                result_queue_d[result_queue_write_pnt_q][NrLanes-1].wdata = {sldu_ring_i[31:0] , ring_data_prev_q[63:32]};
+                if (sldu_ring_ready_i) begin
+                  // If ring is ready to receive data, then update pointers
+                  in_pnt_d    = vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu} ? NrLanes * 8                  : in_pnt_q  + byte_count;
+                  out_pnt_d   = vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu} ? NrLanes * 8                  : out_pnt_q + byte_count;
+                  issue_cnt_d = vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu} ? issue_cnt_q - (NrLanes * 8)  : issue_cnt_q - byte_count;
+                end
+              end else begin
+                // Otherwise we need to wait for 1 more ring packet.
+                sldu_ring_ready_o = 1'b1;
+              end
+            end else begin 
+              // For the other clusters, just one ring packet is needed and we push it into the last lane of the cluster
+              // and update pointers
+              result_queue_d[result_queue_write_pnt_q][NrLanes-1].wdata = sldu_ring_i;
+              if (sldu_ring_ready_i) begin
+                // If ring is ready to receive data, then update pointers
+                in_pnt_d    = vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu} ? NrLanes * 8                  : in_pnt_q  + byte_count;
+                out_pnt_d   = vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu} ? NrLanes * 8                  : out_pnt_q + byte_count;
+                issue_cnt_d = vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu} ? issue_cnt_q - (NrLanes * 8)  : issue_cnt_q - byte_count;
+              end
+            end
+            // in_pnt_d    = vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu} ? NrLanes * 8                  : in_pnt_q  + byte_count;
+            // out_pnt_d   = vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu} ? NrLanes * 8                  : out_pnt_q + byte_count;
+            // issue_cnt_d = vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu} ? issue_cnt_q - (NrLanes * 8)  : issue_cnt_q - byte_count;
+          end
 
           // In Jump to SLIDE_RUN if stride is P2
           if (state_q != SLIDE_NP2_COMMIT)
@@ -602,6 +719,10 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             // Reset the pointer and ask for a new operand
             in_pnt_d           = '0;
             sldu_operand_ready = '1;
+
+            // We are ready to receive next packet from lanes and the ring.
+            sldu_ring_ready_o = 1'b1;
+            
             // Left-rotate the logarithmic counter. Hacky way to write it, but it's to
             // deal with the 2-lanes design without complaints from Verilator...
             // wide signal to please the tool
@@ -630,7 +751,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             // Send result to the VRF
             result_queue_cnt_d += 1;
             result_queue_valid_d[result_queue_write_pnt_q] = '1;
-            result_queue_write_pnt_d                       = result_queue_write_pnt_q + 1;
+            result_queue_write_pnt_d = result_queue_write_pnt_q+1;
             if (result_queue_write_pnt_q == ResultQueueDepth-1)
               result_queue_write_pnt_d = '0;
 
@@ -645,14 +766,14 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             red_stride_cnt_d = 1;
 
             // If this is a vslide1down, fill up the last position with the scalar operand
-            if (vinsn_issue_q.op == VSLIDEDOWN && vinsn_issue_q.use_scalar_op) begin
+            if (vinsn_issue_q.op == VSLIDEDOWN && vinsn_issue_q.use_scalar_op && ClusterId==NrClusters-1) begin
               // Copy the scalar operand to the last word
               automatic int out_seq_byte = issue_cnt_q;
               automatic int out_byte = shuffle_index(out_seq_byte, NrLanes, vinsn_issue_q.vtype.vsew);
               automatic int tgt_lane = out_byte[3 +: $clog2(NrLanes)];
               automatic int tgt_lane_offset = out_byte[2:0];
 
-              unique case (vinsn_issue_q.vtype.vsew)
+              /*unique case (vinsn_issue_q.vtype.vsew)
                 EW8: begin
                   result_queue_d[result_queue_write_pnt_q][tgt_lane].wdata[8*tgt_lane_offset +: 8]
                     = vinsn_issue_q.scalar_op[7:0];
@@ -677,7 +798,10 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
                   result_queue_d[result_queue_write_pnt_q][tgt_lane].be[tgt_lane_offset +: 8] =
                     {8{vinsn_issue_q.vm || mask_q[tgt_lane][tgt_lane_offset]}};
                 end
-              endcase
+              endcase*/
+
+              scalar_shift_data_d = vinsn_issue_q.scalar_op[31:0];
+              result_queue_d[result_queue_write_pnt_q][NrLanes-1].wdata = {scalar_shift_data_d[31:0] , ring_data_prev_q[63:32] };
             end
 
             // Increment vector instruction queue pointers and counters
@@ -912,7 +1036,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       result_final_gnt_q    <= result_final_gnt_d;
       red_stride_cnt_q      <= red_stride_cnt_d;
       np2_loop_mux_sel_q    <= np2_loop_mux_sel_d;
-      slide_np2_buf_valid_q <= slide_np2_buf_valid_d;
+      slide_np2_buf_valid_q <= slide_np2_buf_valid_d;      
     end
   end
 

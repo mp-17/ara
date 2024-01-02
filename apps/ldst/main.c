@@ -32,12 +32,18 @@ extern _Float16 v16a[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), sect
 extern _Float16 v16b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
 extern int vsize;
 
+// #define LDST_TEST  1
+#define SLIDE_TEST 1
+
+#ifdef LDST_TEST
+
 int main() {
-	int vl, avl=vsize; //(1024*NR_CLUSTERS*NR_LANES)/(32);
+	int vl, avl=vsize;
 	asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(avl));
 	printf("vl:%d\n",vl);
 	float *a_ = (float *) v32a;
 	float *b_ = (float *) v32b;
+
 	asm volatile("vle32.v v8,  (%0)" ::"r"(a_));
 	asm volatile("vse32.v v8,  (%0)" ::"r"(b_));
 
@@ -54,3 +60,41 @@ int main() {
 		printf("Success!\n");
 	return 0;
 }
+#endif 
+
+#ifdef SLIDE_TEST
+
+int main() {
+	int vl, avl=vsize;
+	asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(avl));
+	printf("vl:%d\n",vl);
+	float *a_ = (float *) v32a;
+	float *b_ = (float *) v32b;
+
+	float scal=1.25;
+
+	asm volatile("vle32.v v8,  (%0)" ::"r"(a_));
+	asm volatile("vfslide1down.vf v2, v8, %0" ::"f"(scal));
+	asm volatile("vse32.v v2,  (%0)" ::"r"(b_));
+
+	int err_cnt = 0;
+	for (int i=0; i<avl-1; i++) {
+    if (v32b[i] != v32a[i+1]) {
+			printf("Error idx:%d val:%f exp:%f\n", i, v32b[i], v32a[i+1]);
+			return -1;
+		}
+	}
+	if (v32b[avl-1]!=scal) {
+		printf("Error idx:%d val:%f exp:%f\n", avl-1, v32b[avl-1], scal);
+		return -1;
+	}
+	if (err_cnt)
+		printf("Failed!\n");
+	else
+		printf("Success!\n");
+	return 0;
+}
+
+#endif
+
+

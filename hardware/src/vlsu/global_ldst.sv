@@ -41,9 +41,18 @@ logic w_last_d, w_last_q;   // If this is a last write packer
 logic [$clog2(NrClusters)-1:0] cluster_start_r_d, cluster_start_r_q, cluster_start_wr_d, cluster_start_wr_q;
 
 cluster_axi_resp_t [NrClusters-1:0]  cluster_axi_resp_data_d, cluster_axi_resp_data_q;
+cluster_axi_resp_t [NrClusters-1:0] cluster_axi_resp_data_shuffle;
 cluster_axi_req_t  [NrClusters-1:0] axi_req_data_d, axi_req_data_q; 
 
 int len_r, len_w;
+
+// For Shuffling
+logic [NrClusters-1:0] data_valid;
+
+
+logic [NrClusters-1:0] w_cluster_valid;
+logic [NrClusters-1:0] w_cluster_ready_d, w_cluster_ready_q;
+logic [NrClusters-1:0] w_cluster_last_d, w_cluster_last_q; 
 
 always_comb begin : p_global_ldst
   
@@ -128,6 +137,12 @@ always_comb begin : p_global_ldst
   end
 
   /////////// Handle BW mismatch between System and ARA for Write Request
+
+  for (int i=0; i<NrClusters; i++) begin
+    w_cluster_valid[i] = axi_req_i[i].w_valid;
+    w_cluster_ready_d[i] = ~axi_req_i[i].w_valid;
+  end
+
   cluster_start_wr_d = cluster_start_wr_q;
   axi_req_data_d = axi_req_data_q;
   
@@ -135,10 +150,14 @@ always_comb begin : p_global_ldst
   w_ready_d = w_ready_q;
   // If we are ready to receive data, receive new request
   // otherwise assign previous request state.
-  axi_req_data_d = w_ready_q ? axi_req_i : axi_req_data_q;
+  for (int i=0; i<NrClusters; i++) begin
+    axi_req_data_d[i] = w_cluster_ready_q[i] ? axi_req_i[i] : axi_req_data_q[i];
+    w_cluster_last_d[i] = w_cluster_ready_q[i] ? axi_req_i[i].w.last : w_cluster_last_q[i];
+  end
   w_last_d = w_ready_q ? axi_req_i[0].w.last : w_last_q;
 
-  if (axi_req_i[0].w_valid) begin : p_valid_write_data
+  //if (axi_req_i[0].w_valid) begin : p_valid_write_data
+  if (&w_cluster_valid) begin : p_valid_write_data
     // If Total BW of all clusters == System AXI BW, we can support full write
     // BW, otherwise set not ready to receive data.
     w_ready_d = is_full_bw ? axi_resp_i.w_ready : 1'b0;
@@ -165,17 +184,20 @@ always_comb begin : p_global_ldst
       if (cluster_start_wr_q == (NrClusters - (AxiDataWidth/ClusterAxiDataWidth))) begin
         cluster_start_wr_d = 0;
         w_ready_d = 1'b1; // Once all write data from all clusters sent, then we are ready to receive data from clusters.
+        w_cluster_ready_d = '1; 
         w_valid_d = 1'b0; // We don't have valid data anymore
-        if (w_last_d) begin
+        if (&w_cluster_last_d) begin
           axi_req_o.w.last = 1'b1;
           w_last_d = 1'b0;
+          w_cluster_last_d = '0; 
         end
       end
     end
   end
 
   for (int i=0; i<NrClusters; i++) begin
-    axi_resp_o[i].w_ready = w_ready_q; // Set to w_ready_q; Is 1'b1 if the previous write packets have been send to System
+    axi_resp_o[i].w_ready = w_cluster_ready_q[i]; 
+    // axi_resp_o[i].w_ready = w_ready_q; // Set to w_ready_q; Is 1'b1 if the previous write packets have been send to System
   end
 
 end : p_global_ldst
@@ -190,6 +212,9 @@ always_ff @(posedge clk_i or negedge rst_ni) begin
     cluster_start_wr_q <= 0;
     axi_req_data_q <= '0;
     w_ready_q <= 1'b1;
+
+    w_cluster_ready_q <= '1;
+    w_cluster_last_q  <= '0;
   end else begin
     cluster_axi_resp_data_q <= cluster_axi_resp_data_d;
     cluster_start_r_q <= cluster_start_r_d;
@@ -199,6 +224,9 @@ always_ff @(posedge clk_i or negedge rst_ni) begin
     cluster_start_wr_q <= cluster_start_wr_d;
     axi_req_data_q <= axi_req_data_d;
     w_ready_q <= w_ready_d;
+
+    w_cluster_ready_q <= w_cluster_ready_d;
+    w_cluster_last_q  <= w_cluster_last_d; 
   end
 end
 

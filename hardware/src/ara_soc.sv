@@ -216,7 +216,7 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
   logic [AxiDataWidth/8-1:0] l2_be;
   logic [AxiDataWidth-1:0]   l2_wdata;
   logic [AxiDataWidth-1:0]   l2_rdata;
-  logic                      l2_rvalid;
+  logic                      l2_rvalid, l2_rvalid_1;
 
   axi_to_mem #(
     .AddrWidth (AxiAddrWidth   ),
@@ -247,7 +247,8 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .NumWords (L2NumWords  ),
     .NumPorts (1           ),
     .DataWidth(AxiDataWidth),
-    .SimInit("random")
+    .SimInit("random"),
+    .Latency(1)
   ) i_dram (
     .clk_i  (clk_i                                                                      ),
     .rst_ni (rst_ni                                                                     ),
@@ -263,6 +264,9 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
 `endif
 
   // One-cycle latency
+  // `FF(l2_rvalid_1, l2_req, 1'b0);
+  // `FF(l2_rvalid, l2_rvalid_1, 1'b0);
+
   `FF(l2_rvalid, l2_req, 1'b0);
 
   ////////////

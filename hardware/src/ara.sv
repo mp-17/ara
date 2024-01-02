@@ -9,7 +9,8 @@
 module ara import ara_pkg::*; #(
     // RVV Parameters
     parameter  int           unsigned NrLanes      = 0,                          // Number of parallel vector lanes.
-    parameter  int           unsigned NrClusters     = 0,
+    parameter  int           unsigned NrClusters   = 0,
+    parameter  int           unsigned ClusterId    = 0,
     // Support for floating-point data types
     parameter  fpu_support_e          FPUSupport   = FPUSupportHalfSingleDouble,
     // External support for vfrec7, vfrsqrt7
@@ -26,6 +27,11 @@ module ara import ara_pkg::*; #(
     parameter  type                   axi_b_t      = logic,
     parameter  type                   axi_req_t    = logic,
     parameter  type                   axi_resp_t   = logic,
+
+    localparam int  unsigned DataWidth = $bits(elen_t),
+    localparam type remote_data_t = logic [DataWidth-1:0],
+
+
     // Dependant parameters. DO NOT CHANGE!
     // Ara has NrLanes + 3 processing elements: each one of the lanes, the vector load unit, the
     // vector store unit, the slide unit, and the mask unit.
@@ -43,7 +49,17 @@ module ara import ara_pkg::*; #(
     output accelerator_resp_t acc_resp_o,
     // AXI interface
     output axi_req_t          axi_req_o,
-    input  axi_resp_t         axi_resp_i
+    input  axi_resp_t         axi_resp_i,
+
+    // Interface with Ring Interconnect
+    output remote_data_t ring_data_o,
+    output logic ring_valid_o, 
+    input logic ring_ready_i, 
+
+    input remote_data_t ring_data_i,
+    input logic ring_valid_i,
+    output logic ring_ready_o
+
   );
 
   import cf_math_pkg::idx_width;
@@ -59,7 +75,7 @@ module ara import ara_pkg::*; #(
   // Address of an element in each lane's VRF
   typedef logic [idx_width(VRFBSizePerLane)-1:0] vaddr_t;
 
-  localparam int unsigned DataWidth = $bits(elen_t);
+  // localparam int unsigned DataWidth = $bits(elen_t);
   localparam int unsigned StrbWidth = DataWidth / 8;
   typedef logic [StrbWidth-1:0] strb_t;
 
@@ -375,6 +391,8 @@ module ara import ara_pkg::*; #(
 
   sldu #(
     .NrLanes(NrLanes),
+    .NrClusters(NrClusters),
+    .ClusterId(ClusterId),
     .vaddr_t(vaddr_t)
   ) i_sldu (
     .clk_i                   (clk_i                            ),
@@ -402,7 +420,15 @@ module ara import ara_pkg::*; #(
     // Interface with the Mask unit
     .mask_i                  (mask                             ),
     .mask_valid_i            (mask_valid                       ),
-    .mask_ready_o            (sldu_mask_ready                  )
+    .mask_ready_o            (sldu_mask_ready                  ),
+    // Interface with ring interconnect
+    .sldu_ring_o             (ring_data_o), 
+    .sldu_ring_valid_o       (ring_valid_o),
+    .sldu_ring_ready_i       (ring_ready_i), 
+
+    .sldu_ring_i             (ring_data_i),
+    .sldu_ring_valid_i       (ring_valid_i),
+    .sldu_ring_ready_o       (ring_ready_o)
   );
 
   /////////////////
