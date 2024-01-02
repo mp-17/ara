@@ -78,6 +78,8 @@ module ara_cluster import ara_pkg::*; #(
   logic         [NrClusters-1:0] sldu_valid_i, sldu_valid_o; 
   logic         [NrClusters-1:0] sldu_ready_i, sldu_ready_o;
 
+  logic         [NrClusters-1:0] sldu_dir;
+
   for (genvar cluster=0; cluster < NrClusters; cluster++) begin : p_cluster 
     ara #(
       .NrLanes     (NrLanes             ),
@@ -113,7 +115,9 @@ module ara_cluster import ara_pkg::*; #(
 
       .ring_data_i   (sldu_i      [cluster]), 
       .ring_valid_i  (sldu_valid_i[cluster]), 
-      .ring_ready_o  (sldu_ready_o[cluster])
+      .ring_ready_o  (sldu_ready_o[cluster]),
+
+      .sldu_dir_o   (sldu_dir[cluster])
     );
 
     ring_router i_ring_router(
@@ -130,7 +134,7 @@ module ara_cluster import ara_pkg::*; #(
       .sldu_ready_i (sldu_ready_o[cluster]),
 
       // Ring configuration
-      .dir (1'b0),                  // 0-left 1-right
+      .dir (sldu_dir[cluster]),                  // 0-slidedown(left) 1-slideup(right)
       .bypass(1'b0),
 
       // From other ring routers

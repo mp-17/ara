@@ -33,7 +33,8 @@ extern _Float16 v16b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), sect
 extern int vsize;
 
 // #define LDST_TEST  1
-#define SLIDE_TEST 1
+// #define SLIDEDOWN_TEST 1
+#define SLIDEUP_TEST 1
 
 #ifdef LDST_TEST
 
@@ -62,7 +63,7 @@ int main() {
 }
 #endif 
 
-#ifdef SLIDE_TEST
+#ifdef SLIDEDOWN_TEST
 
 int main() {
 	int vl, avl=vsize;
@@ -86,6 +87,41 @@ int main() {
 	}
 	if (v32b[avl-1]!=scal) {
 		printf("Error idx:%d val:%f exp:%f\n", avl-1, v32b[avl-1], scal);
+		return -1;
+	}
+	if (err_cnt)
+		printf("Failed!\n");
+	else
+		printf("Success!\n");
+	return 0;
+}
+
+#endif
+
+#ifdef SLIDEUP_TEST
+
+int main() {
+	int vl, avl=vsize;
+	asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(avl));
+	printf("vl:%d\n",vl);
+	float *a_ = (float *) v32a;
+	float *b_ = (float *) v32b;
+
+	float scal=1.25;
+
+	asm volatile("vle32.v v8,  (%0)" ::"r"(a_));
+	asm volatile("vfslide1up.vf v2, v8, %0" ::"f"(scal));
+	asm volatile("vse32.v v2,  (%0)" ::"r"(b_));
+
+	int err_cnt = 0;
+	for (int i=1; i<avl; i++) {
+    if (v32b[i] != v32a[i-1]) {
+			printf("Error idx:%d val:%f exp:%f\n", i, v32b[i], v32a[i-1]);
+			return -1;
+		}
+	}
+	if (v32b[0]!=scal) {
+		printf("Error idx:%d val:%f exp:%f\n", 0, v32b[0], scal);
 		return -1;
 	}
 	if (err_cnt)

@@ -58,7 +58,9 @@ module ara import ara_pkg::*; #(
 
     input remote_data_t ring_data_i,
     input logic ring_valid_i,
-    output logic ring_ready_o
+    output logic ring_ready_o,
+
+    output logic sldu_dir_o
 
   );
 
@@ -428,7 +430,8 @@ module ara import ara_pkg::*; #(
 
     .sldu_ring_i             (ring_data_i),
     .sldu_ring_valid_i       (ring_valid_i),
-    .sldu_ring_ready_o       (ring_ready_o)
+    .sldu_ring_ready_o       (ring_ready_o),
+    .sldu_dir_o              (sldu_dir_o)
   );
 
   /////////////////
