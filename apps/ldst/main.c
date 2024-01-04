@@ -33,12 +33,13 @@ extern _Float16 v16b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), sect
 extern int vsize;
 
 // #define LDST_TEST  1
-// #define SLIDEDOWN_TEST 1
-#define SLIDEUP_TEST 1
+#define SLIDEDOWN_TEST 1
+// #define SLIDEUP_TEST 1
 
 #ifdef LDST_TEST
 
 int main() {
+	printf("============Load/Store Test============\n");
 	int vl, avl=vsize;
 	asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(avl));
 	printf("vl:%d\n",vl);
@@ -66,6 +67,7 @@ int main() {
 #ifdef SLIDEDOWN_TEST
 
 int main() {
+	printf("============Slide1down Test============\n");
 	int vl, avl=vsize;
 	asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(avl));
 	printf("vl:%d\n",vl);
@@ -101,6 +103,7 @@ int main() {
 #ifdef SLIDEUP_TEST
 
 int main() {
+	printf("============Slide1up Test============\n");
 	int vl, avl=vsize;
 	asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(avl));
 	printf("vl:%d\n",vl);
