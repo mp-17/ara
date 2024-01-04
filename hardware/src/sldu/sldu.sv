@@ -186,18 +186,6 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   logic [NrLanes-1:0]  sldu_operand_valid_d;
   logic [NrLanes-1:0]  sldu_operand_ready_q;
 
-  elen_t [NrLanes-1:0] sldu_operand_i_1;
-  logic [NrLanes-1:0]  sldu_operand_valid_i_1;
-  logic [NrLanes-1:0]  sldu_operand_ready_q_1;
-
-  elen_t [NrLanes-1:0] sldu_operand_t;
-  logic [NrLanes-1:0]  sldu_operand_valid_t;
-  logic [NrLanes-1:0]  sldu_operand_ready_t;
-
-  elen_t fifo_ring_out, fifo_ring_inp;
-  logic fifo_ring_ready_inp, fifo_ring_ready_out;
-  logic fifo_ring_valid_out, fifo_ring_valid_inp;
-
   typedef enum logic {
     NP2_BUFFER_PNT,
     NP2_RESULT_PNT
@@ -226,51 +214,6 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       .data_o (sldu_operand[l]            )
     );
   end
-  
-  //// Stream FIFOs to handle ring data
-  // Fifo to interact with input from ring
-  stream_fifo #(
-    .FALL_THROUGH(1'b1),
-    .DATA_WIDTH(64),
-    .DEPTH(4)
-    ) i_ring_fifo_input (
-    .clk_i     (clk_i),
-    .rst_ni    (rst_ni),
-
-    .flush_i   (1'b0),
-    .testmode_i (1'b0),
-    .usage_o (/*unused*/),
-
-    .data_i    (sldu_ring_i),
-    .valid_i   (sldu_ring_valid_i),
-    .ready_o   (sldu_ring_ready_o),
-
-    .data_o    (fifo_ring_inp),
-    .valid_o   (fifo_ring_valid_inp),
-    .ready_i   (fifo_ring_ready_out)
-    );
-
-  // Fifo to interact with output to ring
-  stream_fifo #(
-    .FALL_THROUGH(1'b1),
-    .DATA_WIDTH(64),
-    .DEPTH(4)
-    ) i_ring_fifo_output (
-    .clk_i     (clk_i),
-    .rst_ni    (rst_ni),
-
-    .flush_i   (1'b0),
-    .testmode_i (1'b0),
-    .usage_o (/*unused*/),
-
-    .data_i    (fifo_ring_out),
-    .valid_i   (fifo_ring_valid_out),
-    .ready_o   (fifo_ring_ready_inp),
-
-    .data_o    (sldu_ring_o),
-    .valid_o   (sldu_ring_valid_o),
-    .ready_i   (sldu_ring_ready_i)
-    );
 
   always_comb begin
     for (int l = 0; l < NrLanes; l++) begin
@@ -460,8 +403,59 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   // Remaining bytes of the current instruction in the commit phase
   vlen_t commit_cnt_d, commit_cnt_q;
 
-  // To handle Sliding operations using ring 
-  elen_t scalar_shift_data_q, scalar_shift_data_d;
+  /////////////////////////////
+  //     Ring Interconnect   //
+  /////////////////////////////
+
+  elen_t fifo_ring_out, fifo_ring_inp;
+  logic fifo_ring_ready_inp, fifo_ring_ready_out;
+  logic fifo_ring_valid_out, fifo_ring_valid_inp;
+
+  //// Stream FIFOs to handle ring data
+  // Fifo to interact with input from ring
+  stream_fifo #(
+    .FALL_THROUGH(1'b1),
+    .DATA_WIDTH(64),
+    .DEPTH(4)
+  ) i_ring_fifo_input (
+    .clk_i     (clk_i),
+    .rst_ni    (rst_ni),
+
+    .flush_i   (1'b0),
+    .testmode_i (1'b0),
+    .usage_o (/*unused*/),
+
+    .data_i    (sldu_ring_i),
+    .valid_i   (sldu_ring_valid_i),
+    .ready_o   (sldu_ring_ready_o),
+
+    .data_o    (fifo_ring_inp),
+    .valid_o   (fifo_ring_valid_inp),
+    .ready_i   (fifo_ring_ready_out)
+  );
+
+  // Fifo to interact with output to ring
+  stream_fifo #(
+    .FALL_THROUGH(1'b1),
+    .DATA_WIDTH(64),
+    .DEPTH(4)
+  ) i_ring_fifo_output (
+    .clk_i     (clk_i),
+    .rst_ni    (rst_ni),
+
+    .flush_i   (1'b0),
+    .testmode_i (1'b0),
+    .usage_o (/*unused*/),
+
+    .data_i    (fifo_ring_out),
+    .valid_i   (fifo_ring_valid_out),
+    .ready_o   (fifo_ring_ready_inp),
+
+    .data_o    (sldu_ring_o),
+    .valid_o   (sldu_ring_valid_o),
+    .ready_i   (sldu_ring_ready_i)
+  );
+
   elen_t ring_data_prev_d, ring_data_prev_q;
   logic ring_data_prev_valid_d, ring_data_prev_valid_q;
   logic slide_data_valid;
@@ -472,11 +466,9 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     if(~rst_ni) begin
       ring_data_prev_q <= '0;
       ring_data_prev_valid_q <= 1'b0;
-      scalar_shift_data_q <= '0;
     end else begin
       ring_data_prev_q <= ring_data_prev_d;
       ring_data_prev_valid_q <= ring_data_prev_valid_d;
-      scalar_shift_data_q <= scalar_shift_data_d;
     end
   end
   
@@ -539,7 +531,6 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
     // Ring Interconnect states
     sldu_dir_o = (vinsn_issue_q.op==VSLIDEUP) ? 1'b1 : 1'b0;
-    scalar_shift_data_d = scalar_shift_data_q;
     
     fifo_ring_out = '0; 
     fifo_ring_valid_out = 1'b0;
@@ -706,8 +697,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
                   {8{vinsn_issue_q.vm || mask_q[0][0]}};
               end
             endcase*/
-            scalar_shift_data_d = vinsn_issue_q.scalar_op[31:0];
-            result_queue_d[result_queue_write_pnt_q][0].wdata[31:0] = {scalar_shift_data_d[31:0]};
+            result_queue_d[result_queue_write_pnt_q][0].wdata[31:0] = {vinsn_issue_q.scalar_op[31:0]};
           end
 
           // Read a full word from the VRF or finished the instruction
