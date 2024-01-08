@@ -33,8 +33,9 @@ extern _Float16 v16b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), sect
 extern int vsize;
 
 // #define LDST_TEST  1
-#define SLIDEDOWN_TEST 1
-// #define SLIDEUP_TEST 1
+// #define SLIDEDOWN_TEST 1
+#define SLIDEUP_TEST 1
+// #define REDUCTION_TEST 1
 
 #ifdef LDST_TEST
 
@@ -132,6 +133,29 @@ int main() {
 	else
 		printf("Success!\n");
 	return 0;
+}
+
+#endif
+
+#ifdef REDUCTION_TEST
+extern float red32;
+
+int main() {
+	printf("============Reduction Test============\n");
+	int vl, avl=vsize;
+	asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(avl));
+	printf("vl:%d\n",vl);
+	float *a_ = (float *) v32a;
+	// float *b_ = (float *) v32b;
+
+	float red;
+
+	asm volatile("vmv.s.x v0, zero");
+	asm volatile("vle32.v v8,  (%0)" ::"r"(a_));
+	asm volatile("vfredusum.vs v0, v8, v0");
+  asm volatile("vfmv.f.s %0, v0" : "=f"(red));
+
+  printf("Res:%f Exp:%f\n", red, red32);
 }
 
 #endif

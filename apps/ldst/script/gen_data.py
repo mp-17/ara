@@ -72,6 +72,9 @@ emit("v32a", v32a, 'NR_LANES*NR_CLUSTERS*4')
 emit("v32b", v32b, 'NR_LANES*NR_CLUSTERS*4')
 emit("v16a", v16a, 'NR_LANES*NR_CLUSTERS*4')
 emit("v16b", v16b, 'NR_LANES*NR_CLUSTERS*4')
+red32 = sum(v32a)
+emit("red32", np.array(red32, dtype=np.float32))
+
 # emit("gold64", np.array(gold64, dtype=np.float64));
 # emit("gold32", np.array(gold32, dtype=np.float32));
 # emit("gold16", gold16, 'NR_LANES*4');

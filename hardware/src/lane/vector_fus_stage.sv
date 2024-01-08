@@ -9,6 +9,8 @@
 
 module vector_fus_stage import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx_width; #(
     parameter  int           unsigned NrLanes      = 0,
+    parameter  int           unsigned NrClusters   = 0,
+    parameter  int           unsigned ClusterId    = 0,
     // Support for floating-point data types
     parameter  fpu_support_e          FPUSupport   = FPUSupportHalfSingleDouble,
     // External support for vfrec7, vfrsqrt7
@@ -145,7 +147,9 @@ module vector_fus_stage import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg
   ///////////////////
 
   vmfpu #(
-    .NrLanes   (NrLanes   ),
+    .NrLanes    (NrLanes   ),
+    .NrClusters (NrClusters),
+    .ClusterId  (ClusterId),
     .FPUSupport(FPUSupport),
     .FPExtSupport(FPExtSupport),
     .FixPtSupport(FixPtSupport),

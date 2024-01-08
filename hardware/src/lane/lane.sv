@@ -11,6 +11,8 @@
 
 module lane import ara_pkg::*; import rvv_pkg::*; #(
     parameter  int           unsigned NrLanes         = 1, // Number of lanes
+    parameter  int           unsigned NrClusters      = 0,
+    parameter  int           unsigned ClusterId       = 0,
     // Support for floating-point data types
     parameter  fpu_support_e          FPUSupport      = FPUSupportHalfSingleDouble,
     // External support for vfrec7, vfrsqrt7
@@ -355,6 +357,8 @@ module lane import ara_pkg::*; import rvv_pkg::*; #(
 
   vector_fus_stage #(
     .NrLanes     (NrLanes     ),
+    .NrClusters  (NrClusters  ),
+    .ClusterId   (ClusterId   ), 
     .FPUSupport  (FPUSupport  ),
     .FPExtSupport(FPExtSupport),
     .FixPtSupport(FixPtSupport),

@@ -29,6 +29,7 @@ module ring_router import ara_pkg::*; #(
 
 	input logic dir,                  // 0-move data left (slidedown) 1- move data right
 	input logic bypass,
+	input logic conf_valid,
 
 	// From other ring routers
 	input remote_data_t ring_right_i,
@@ -52,6 +53,19 @@ module ring_router import ara_pkg::*; #(
 	remote_data_t ring_right_inp, ring_left_inp; 
 	logic ring_right_ready_out, ring_left_ready_out;
 	logic ring_right_valid_inp, ring_left_valid_inp;
+
+	logic dir_d, dir_q; 
+	logic bypass_d, bypass_q;
+
+	always_ff @(posedge clk_i or negedge rst_ni) begin
+		if(~rst_ni) begin
+			dir_q <= 1'b0;
+			bypass_q <= 1'b0;
+		end else begin 
+			dir_q <= dir_d;
+			bypass_q <= bypass_d;
+		end
+	end
 
 	spill_register #(
 		.T(elen_t)
@@ -88,8 +102,11 @@ module ring_router import ara_pkg::*; #(
 		ring_right_ready_out = 1'b0; 
 		sldu_ready_o       = 1'b0;
 
-		if (~bypass) begin
-			if (dir==0) begin
+		bypass_d = conf_valid ? bypass : bypass_q;
+		dir_d    = conf_valid ? dir    : dir_q;
+
+		if (~bypass_d) begin
+			if (dir_d==0) begin
 				ring_left_o        = sldu_i;
 				ring_left_valid_o  = sldu_valid_i;
 				sldu_ready_o       = ring_left_ready_i;
@@ -107,7 +124,7 @@ module ring_router import ara_pkg::*; #(
 				ring_left_ready_out = sldu_ready_i;
 			end
 		end else begin
-			if (dir==0) begin
+			if (dir_d==0) begin
 				ring_left_o        = ring_right_inp;
 				ring_left_valid_o  = ring_right_valid_inp;
 				ring_right_ready_out = ring_left_ready_i;

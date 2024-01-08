@@ -78,7 +78,7 @@ module ara_cluster import ara_pkg::*; #(
   logic         [NrClusters-1:0] sldu_valid_i, sldu_valid_o; 
   logic         [NrClusters-1:0] sldu_ready_i, sldu_ready_o;
 
-  logic         [NrClusters-1:0] sldu_dir;
+  logic         [NrClusters-1:0] sldu_dir, sldu_bypass, sldu_conf_valid;
 
   for (genvar cluster=0; cluster < NrClusters; cluster++) begin : p_cluster 
     ara #(
@@ -117,7 +117,9 @@ module ara_cluster import ara_pkg::*; #(
       .ring_valid_i  (sldu_valid_i[cluster]), 
       .ring_ready_o  (sldu_ready_o[cluster]),
 
-      .sldu_dir_o   (sldu_dir[cluster])
+      .sldu_dir_o        (sldu_dir[cluster]),
+      .sldu_bypass_o     (sldu_bypass[cluster]),
+      .sldu_config_valid_o (sldu_conf_valid[cluster])
     );
 
     ring_router i_ring_router(
@@ -134,8 +136,9 @@ module ara_cluster import ara_pkg::*; #(
       .sldu_ready_i (sldu_ready_o[cluster]),
 
       // Ring configuration
-      .dir (sldu_dir[cluster]),                  // 0-slidedown(left) 1-slideup(right)
-      .bypass(1'b0),
+      .dir        (sldu_dir[cluster]),                  // 0-slidedown(left) 1-slideup(right)
+      .bypass     (sldu_bypass[cluster]),
+      .conf_valid (sldu_conf_valid[cluster]),
 
       // From other ring routers
       .ring_right_i       (ring_data_l      [cluster == (NrClusters-1) ? 0 : cluster + 1]),

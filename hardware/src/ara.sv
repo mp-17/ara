@@ -60,7 +60,9 @@ module ara import ara_pkg::*; #(
     input logic ring_valid_i,
     output logic ring_ready_o,
 
-    output logic sldu_dir_o
+    output logic sldu_dir_o,
+    output logic sldu_bypass_o,
+    output logic sldu_config_valid_o
 
   );
 
@@ -249,6 +251,8 @@ module ara import ara_pkg::*; #(
   for (genvar lane = 0; lane < NrLanes; lane++) begin: gen_lanes
     lane #(
       .NrLanes     (NrLanes     ),
+      .NrClusters  (NrClusters  ),
+      .ClusterId   (ClusterId   ),
       .FPUSupport  (FPUSupport  ),
       .FPExtSupport(FPExtSupport),
       .FixPtSupport(FixPtSupport)
@@ -431,7 +435,9 @@ module ara import ara_pkg::*; #(
     .sldu_ring_i             (ring_data_i),
     .sldu_ring_valid_i       (ring_valid_i),
     .sldu_ring_ready_o       (ring_ready_o),
-    .sldu_dir_o              (sldu_dir_o)
+    .sldu_dir_o              (sldu_dir_o),
+    .sldu_bypass_o           (sldu_bypass_o),
+    .sldu_config_valid_o     (sldu_config_valid_o)
   );
 
   /////////////////
