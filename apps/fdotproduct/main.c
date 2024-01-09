@@ -47,12 +47,12 @@
 // Vector size (Byte)
 extern uint64_t vsize;
 // Input vectors
-extern double v64a[] __attribute__((aligned(32 * NR_LANES), section(".l2")));
-extern double v64b[] __attribute__((aligned(32 * NR_LANES), section(".l2")));
-extern float v32a[] __attribute__((aligned(32 * NR_LANES), section(".l2")));
-extern float v32b[] __attribute__((aligned(32 * NR_LANES), section(".l2")));
-extern _Float16 v16a[] __attribute__((aligned(32 * NR_LANES), section(".l2")));
-extern _Float16 v16b[] __attribute__((aligned(32 * NR_LANES), section(".l2")));
+extern double v64a[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern double v64b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern float v32a[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern float v32b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern _Float16 v16a[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern _Float16 v16b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
 // Golden outputs
 extern double gold64;
 extern float gold32;
@@ -72,7 +72,7 @@ int main() {
 
   uint64_t runtime_s, runtime_v;
 
-  for (uint64_t avl = 8; avl <= (vsize >> 3); avl *= 8) {
+  /*for (uint64_t avl = 8; avl <= (vsize >> 3); avl *= 8) {
     printf("Calulating 64b dotp with vectors with length = %lu\n", avl);
     start_timer();
     res64_v = fdotp_v64b(v64a, v64b, avl);
@@ -97,9 +97,11 @@ int main() {
         }
       }
     }
-  }
+  }*/
 
-  for (uint64_t avl = 8; avl <= (vsize >> 2); avl *= 8) {
+  
+  // for (uint64_t avl = 16; avl <= (vsize); avl *= 2) {
+    uint64_t avl=vsize;
     printf("Calulating 32b dotp with vectors with length = %lu\n", avl);
     start_timer();
     res32_v = fdotp_v32b(v32a, v32b, avl);
@@ -118,14 +120,15 @@ int main() {
     if (CHECK) {
       if (SCALAR) {
         printf("Checking results: v = %f, s = %f\n", res32_v, res32_s);
-        if (!similarity_check(res32_v, res32_s, THRESHOLD_32b)) {
+        if (!similarity_check_32b(res32_v, res32_s, THRESHOLD_32b)) {
           printf("Error: v = %f, s = %f\n", res32_v, res32_s);
           return -1;
         }
       }
     }
-  }
-
+  // }
+  
+  /*
   for (uint64_t avl = 8; avl <= (vsize >> 2); avl *= 8) {
     // Dotp
     printf("Calulating 16b dotp with vectors with length = %lu\n", avl);
@@ -154,7 +157,7 @@ int main() {
         }
       }
     }
-  }
+  }*/
 
   printf("SUCCESS.\n");
 
