@@ -249,7 +249,7 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
         // How many bytes are valid in this instruction
         automatic vlen_t vinsn_valid_bytes = issue_cnt_q - vrf_pnt_q;
         // How many bytes are valid in this AXI word
-        automatic vlen_t axi_valid_bytes   = upper_byte - lower_byte - r_pnt_q + 1;
+        automatic vlen_t axi_valid_bytes   = AxiDataWidth/8; // upper_byte - lower_byte - r_pnt_q + 1;
 
         // How many bytes are we committing?
         automatic logic [idx_width(DataWidth*NrLanes/8):0] valid_bytes;
@@ -262,9 +262,9 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
         // Copy data from the R channel into the result queue
         for (int axi_byte = 0; axi_byte < AxiDataWidth/8; axi_byte++) begin
           // Is this byte a valid byte in the R beat?
-          if (axi_byte >= lower_byte + r_pnt_q && axi_byte <= upper_byte) begin
+          //if (axi_byte >= lower_byte + r_pnt_q && axi_byte <= upper_byte) begin
             // Map axi_byte to the corresponding byte in the VRF word (sequential)
-            automatic int vrf_seq_byte = axi_byte - lower_byte - r_pnt_q + vrf_pnt_q;
+            automatic int vrf_seq_byte = axi_byte + vrf_pnt_q; //axi_byte - lower_byte - r_pnt_q + vrf_pnt_q;
             // And then shuffle it
             automatic int vrf_byte = shuffle_index(vrf_seq_byte, NrLanes, vinsn_issue_q.vtype.vsew);
 
@@ -280,7 +280,7 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
               result_queue_d[result_queue_write_pnt_q][vrf_lane].be[vrf_offset] =
                 vinsn_issue_q.vm || mask_i[vrf_lane][vrf_offset];
             end
-          end
+          //end
         end
 
         // Initialize id and addr fields of the result queue requests
@@ -316,7 +316,7 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
       end
 
       // Consumed all valid bytes in this R beat
-      if (r_pnt_d == upper_byte - lower_byte + 1 || issue_cnt_d == '0) begin
+      if (r_pnt_d == AxiDataWidth/8 /*upper_byte - lower_byte + 1*/ || issue_cnt_d == '0) begin
         // Request another beat
         axi_r_ready_o = 1'b1;
         r_pnt_d       = '0;

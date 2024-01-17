@@ -77,9 +77,10 @@ if len(sys.argv) > 1:
 	assert(f % 2 == 1), "The filter size must be an odd integer number"
 else:
 	matrix_width = 64
-	f = 3
+	f = 7
 
-dtype=np.float64
+#dtype=np.float64
+dtype=np.float32
 
 # Input image. Take a square image
 M = matrix_width
@@ -91,10 +92,12 @@ assert(M % 4 == 0), "Output image dimension must be divisible by 4, pad the inpu
 assert(N % 4 == 0), "Output image dimension must be divisible by 4, pad the input image accordingly"
 
 # Generate a random float64 input padded image
-image = np.random.rand(M_pad, N_pad).astype(dtype);
+image = np.random.rand(M_pad, N_pad).astype(dtype)
+# image = np.ones((M_pad, N_pad)).astype(dtype)
 
 # Generate a random float64 filter
-gen_filter = np.random.rand(f, f).astype(dtype);
+gen_filter = np.random.rand(f, f).astype(dtype)
+# gen_filter = np.ones((f,f)).astype(dtype)
 
 # Create the empty o matrix
 empty_o = np.zeros((M, N)).astype(dtype)
@@ -107,7 +110,7 @@ print(".section .data,\"aw\",@progbits")
 emit("M", np.array(M, dtype=np.uint64))
 emit("N", np.array(N, dtype=np.uint64))
 emit("F", np.array(f, dtype=np.uint64))
-emit("i", image, 'NR_LANES*4')
-emit("f", gen_filter, 'NR_LANES*4')
-emit("o", empty_o, 'NR_LANES*4')
-emit("golden_o", result, 'NR_LANES*4')
+emit("i", image, 'NR_LANES*4*NR_CLUSTERS')
+emit("f", gen_filter, 'NR_LANES*4*NR_CLUSTERS')
+emit("o", empty_o, 'NR_LANES*4*NR_CLUSTERS')
+emit("golden_o", result, 'NR_LANES*4*NR_CLUSTERS')

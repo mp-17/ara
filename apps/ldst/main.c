@@ -33,8 +33,8 @@ extern _Float16 v16b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), sect
 extern int vsize;
 
 // #define LDST_TEST  1
-// #define SLIDEDOWN_TEST 1
-#define SLIDEUP_TEST 1
+#define SLIDEDOWN_TEST 1
+// #define SLIDEUP_TEST 1
 // #define REDUCTION_TEST 1
 
 #ifdef LDST_TEST
@@ -44,7 +44,9 @@ int main() {
 	int vl, avl=vsize;
 	asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(vl) : "r"(avl));
 	printf("vl:%d\n",vl);
-	float *a_ = (float *) v32a;
+	int shift = 1;
+
+	float *a_ = (float *) v32a+shift;
 	float *b_ = (float *) v32b;
 
 	asm volatile("vle32.v v8,  (%0)" ::"r"(a_));
@@ -52,8 +54,8 @@ int main() {
 
 	int err_cnt = 0;
 	for (int i=0; i<avl; i++) {
-		if (v32b[i] != v32a[i]) {
-			printf("Error val:%f exp:%f\n", v32b[i], v32a[i]);
+		if (v32b[i] != v32a[i+shift]) {
+			printf("Error idx:%d val:%f exp:%f\n", i, v32b[i], v32a[i+shift]);
 			return -1;
 		}
 	}

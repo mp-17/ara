@@ -72,8 +72,8 @@ void fconv2d32_7x7_block(float *o, float *i, float *f, int64_t R, int64_t C,
                        int64_t n_, int64_t F) {
 
   // Helper variables
-  int64_t ldo = C << 3;
-  int64_t ldi_pad = (C + F - 1) << 3;
+  int64_t ldo = C << 2; // float 4B / element
+  int64_t ldi_pad = (C + F - 1) << 2;
 
   float *i_ = i;
 

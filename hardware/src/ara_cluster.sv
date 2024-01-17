@@ -66,8 +66,8 @@ module ara_cluster import ara_pkg::*; #(
   cluster_axi_req_t      [NrClusters-1:0] ara_axi_req, ara_axi_req_cut;
   cluster_axi_resp_t     [NrClusters-1:0] ara_axi_resp, ara_axi_resp_cut, ara_axi_resp_delay;
 
-  axi_req_t  [NrAxiCuts:0] axi_req_cut;
-  axi_resp_t [NrAxiCuts:0] axi_resp_cut;
+  axi_req_t  axi_req_cut;
+  axi_resp_t axi_resp_cut;
 
   // Ring
   remote_data_t [NrClusters-1:0] ring_data_l, ring_data_r;
@@ -185,6 +185,7 @@ module ara_cluster import ara_pkg::*; #(
     .NrClusters         (NrClusters         ),
     .AxiDataWidth       (AxiDataWidth       ),
     .ClusterAxiDataWidth(ClusterAxiDataWidth),
+    .AxiAddrWidth       (AxiAddrWidth       ),
     .cluster_axi_req_t  (cluster_axi_req_t  ),
     .cluster_axi_resp_t (cluster_axi_resp_t ),
     .axi_req_t          (axi_req_t          ),
@@ -196,12 +197,11 @@ module ara_cluster import ara_pkg::*; #(
     .axi_req_i (ara_axi_req_cut  ),
     .axi_resp_o(ara_axi_resp_cut ),
     // To System
-    .axi_resp_i(axi_resp_cut[0]),
-    .axi_req_o (axi_req_cut[0] )
-    // .axi_resp_i(axi_resp_i),
-    // .axi_req_o (axi_req_o )
+    .axi_resp_i(axi_resp_cut),
+    .axi_req_o (axi_req_cut)
   );
-
+  
+  /*
   // Axi Cuts
   for (genvar i=0; i < NrAxiCuts; i++) begin : p_cuts
     axi_cut #(
@@ -223,7 +223,30 @@ module ara_cluster import ara_pkg::*; #(
   end
 
   assign axi_req_o  = axi_req_cut[NrAxiCuts]; 
-  assign axi_resp_cut[NrAxiCuts] = axi_resp_i;
+  assign axi_resp_cut[NrAxiCuts] = axi_resp_i;*/
+
+  // Align stage
+
+  align_stage #(
+      .AxiDataWidth(AxiDataWidth),
+      .AxiAddrWidth(AxiAddrWidth),
+      .axi_ar_t   (axi_ar_t     ),
+      .axi_aw_t   (axi_aw_t     ),
+      .axi_b_t    (axi_b_t      ),
+      .axi_r_t    (axi_r_t      ),
+      .axi_w_t    (axi_w_t      ),
+      .axi_req_t(axi_req_t), 
+      .axi_resp_t(axi_resp_t)
+    ) i_align_stage (
+      .clk_i (clk_i), 
+      .rst_ni(rst_ni), 
+
+      .axi_req_i(axi_req_cut),
+      .axi_resp_o(axi_resp_cut),
+
+      .axi_req_o(axi_req_o),
+      .axi_resp_i(axi_resp_i)
+  );
 
   assign acc_resp_o = acc_resp[0];
 

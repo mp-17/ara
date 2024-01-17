@@ -41,7 +41,7 @@ else:
   vsize = 64
 
 avl64 = int(vsize)
-avl32 = int(vsize)
+avl32 = int(vsize)+10 # To test unaligned 
 avl16 = int(vsize)
 
 # Create the vectors
@@ -72,7 +72,7 @@ emit("v32a", v32a, 'NR_LANES*NR_CLUSTERS*4')
 emit("v32b", v32b, 'NR_LANES*NR_CLUSTERS*4')
 emit("v16a", v16a, 'NR_LANES*NR_CLUSTERS*4')
 emit("v16b", v16b, 'NR_LANES*NR_CLUSTERS*4')
-red32 = sum(v32a)
+red32 = sum(v32a[0:vsize])
 emit("red32", np.array(red32, dtype=np.float32))
 
 # emit("gold64", np.array(gold64, dtype=np.float64));

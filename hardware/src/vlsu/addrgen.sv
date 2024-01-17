@@ -489,7 +489,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
             eff_axi_dw_d     = AxiDataWidth/8;
             eff_axi_dw_log_d = $clog2(AxiDataWidth/8);
           end
-
+          /*
           // The start address is found by aligning the original request address by the width of
           // the memory interface.
           aligned_start_addr_d = aligned_addr(axi_addrgen_d.addr, $clog2(AxiDataWidth/8));
@@ -513,6 +513,11 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
             aligned_end_addr_d        = {aligned_start_addr_d[AxiAddrWidth-1:12], 12'hFFF};
             aligned_next_start_addr_d = {                       next_2page_msb_d, 12'h000};
           end
+          */
+
+          aligned_start_addr_d = axi_addrgen_d.addr;
+          aligned_next_start_addr_d = axi_addrgen_d.addr + (axi_addrgen_d.len << int'(axi_addrgen_d.vew));
+          aligned_end_addr_d = aligned_next_start_addr_d - 1;
         end
       end
       AXI_ADDRGEN_MISALIGNED: begin
@@ -571,10 +576,15 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
               // 2 - The AXI burst length cannot be longer than the number of beats required
               //     to access the memory regions between aligned_start_addr and
               //     aligned_end_addr
-              if (burst_length > ((aligned_end_addr_q[11:0] - aligned_start_addr_q[11:0]) >>
+              if (burst_length > ((aligned_end_addr_q - aligned_start_addr_q) >>
                     eff_axi_dw_log_q) + 1)
-                burst_length = ((aligned_end_addr_q[11:0] - aligned_start_addr_q[11:0]) >>
+                burst_length = ((aligned_end_addr_q - aligned_start_addr_q) >>
                   eff_axi_dw_log_q) + 1;
+
+              // if (burst_length > ((aligned_end_addr_q[11:0] - aligned_start_addr_q[11:0]) >>
+              //       eff_axi_dw_log_q) + 1)
+              //   burst_length = ((aligned_end_addr_q[11:0] - aligned_start_addr_q[11:0]) >>
+              //     eff_axi_dw_log_q) + 1;
 
               // AR Channel
               if (axi_addrgen_q.is_load) begin

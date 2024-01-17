@@ -15,5 +15,6 @@ for {set cluster 0}  {$cluster < [examine -radix dec ara_tb.NrClusters]} {incr c
     do ../scripts/wave_ara.tcl $cluster
 }
 
-add wave -noupdate -group Global /ara_tb/dut/i_ara_soc/i_system/i_ara_cluster/i_global_ldst/*
+add wave -noupdate -group Global -group LdSt /ara_tb/dut/i_ara_soc/i_system/i_ara_cluster/i_global_ldst/*
+add wave -noupdate -group Global -group Aligner /ara_tb/dut/i_ara_soc/i_system/i_ara_cluster/i_align_stage/*
 

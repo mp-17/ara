@@ -12,11 +12,13 @@ module global_ldst #(
   parameter  int unsigned NrClusters          = 0,
   parameter  int unsigned AxiDataWidth        = 0,
   parameter  int unsigned ClusterAxiDataWidth = 0,
+  parameter  int unsigned AxiAddrWidth        = 0, 
   parameter type cluster_axi_req_t            = logic,
   parameter type cluster_axi_resp_t           = logic,
   parameter type axi_req_t                    = logic,
   parameter type axi_resp_t                   = logic,
-  
+  parameter type axi_addr_t                   = logic [AxiAddrWidth-1:0],
+
   localparam int size_axi                 = $clog2(AxiDataWidth)-3,
   localparam int numShuffleStages         = $clog2(AxiDataWidth/(8*NrLanes))-1,
   localparam logic is_full_bw             = (NrClusters == (AxiDataWidth/ClusterAxiDataWidth)) ? 1'b1 : 1'b0 
@@ -32,6 +34,11 @@ module global_ldst #(
   input  axi_resp_t                     axi_resp_i,
   output axi_req_t                      axi_req_o
 );
+
+import cf_math_pkg::idx_width;
+import axi_pkg::aligned_addr;
+import axi_pkg::BURST_INCR;
+import axi_pkg::CACHE_MODIFIABLE;
 
 logic w_ready_q, w_ready_d; // If this unit is ready to receive data from ARA
 logic w_valid_d, w_valid_q; // If this unit has a walid write data to System 
@@ -54,6 +61,24 @@ logic [NrClusters-1:0] w_cluster_valid;
 logic [NrClusters-1:0] w_cluster_ready_d, w_cluster_ready_q;
 logic [NrClusters-1:0] w_cluster_last_d, w_cluster_last_q; 
 
+// Handle unaligned AXI
+cluster_axi_req_t req_d, req_q;
+axi_req_t req_final;
+logic r_req_valid_d, r_req_valid_q, r_req_ready;
+axi_addr_t aligned_start_addr_d, aligned_next_start_addr_d, aligned_end_addr_d;
+logic [($bits(aligned_start_addr_d) - 12)-1:0] next_2page_msb_d;
+logic [8:0] burst_length; // max 256 
+
+always_ff @(posedge clk_i or negedge rst_ni) begin
+  if(~rst_ni) begin
+    r_req_valid_q <= 1'b0;
+    req_q         <= '0;
+  end else begin
+    r_req_valid_q <= r_req_valid_d;
+    req_q         <= req_d;
+  end
+end
+
 always_comb begin : p_global_ldst
   
   // Copy data between ARA<->System
@@ -67,21 +92,74 @@ always_comb begin : p_global_ldst
     axi_req_o.aw.len = len_w - 1;
   axi_req_o.aw.size = size_axi;
   axi_req_o.aw_valid = axi_req_i[0].aw_valid;
+  
+  //////////////////
   // ar channel
-  axi_req_o.ar = axi_req_i[0].ar;
-  len_r = (((axi_req_i[0].ar.len + 1) << axi_req_i[0].ar.size) << $clog2(NrClusters) >> size_axi);
-  if (len_r)
-    axi_req_o.ar.len = len_r - 1;
-  axi_req_o.ar.size = size_axi;
-  axi_req_o.ar_valid = axi_req_i[0].ar_valid;
-  // w
-  /*for (int i=0; i<NrClusters; i++) begin : write_copy
-    axi_req_o.w.data[i*ClusterAxiDataWidth +: ClusterAxiDataWidth] = axi_req_i[i].w.data;
-    axi_req_o.w.strb[i*ClusterAxiDataWidth/8 +: ClusterAxiDataWidth/8] = axi_req_i[i].w.strb;
+  req_d = req_q;
+  r_req_valid_d = r_req_valid_q;
+  r_req_ready = ~r_req_valid_q;
+
+  req_final = '0;
+  req_final.ar_valid = 1'b0;
+
+  if (axi_req_i[0].ar_valid && r_req_ready) begin 
+    req_d.ar = axi_req_i[0].ar;
+    r_req_valid_d = 1'b1;
   end
-  axi_req_o.w.last = axi_req_i[0].w.last;
-  axi_req_o.w.user = axi_req_i[0].w.user;
-  axi_req_o.w_valid = axi_req_i[0].w_valid;*/
+
+  if (r_req_valid_d==1'b1) begin
+    req_final           = req_d;
+    req_final.ar.size   = size_axi;
+    req_final.ar.cache  = CACHE_MODIFIABLE;
+    req_final.ar.burst  = BURST_INCR;
+    req_final.ar_valid = 1'b1;
+    
+    // Find len corresponding to axi data width to memory
+    len_r = (((req_d.ar.len + 1) << req_d.ar.size) << $clog2(NrClusters) >> size_axi);
+    if (len_r)
+      len_r = len_r - 1;
+
+    // Check if the address is unaligned for AxiDataWidth bits
+    aligned_start_addr_d = aligned_addr(req_final.ar.addr, size_axi);
+    aligned_next_start_addr_d = aligned_addr(req_final.ar.addr + ((len_r+1) << size_axi) - 1, size_axi) + AxiDataWidth/8;
+    aligned_end_addr_d = aligned_next_start_addr_d - 1;
+    next_2page_msb_d = aligned_start_addr_d[AxiAddrWidth-1:12] + 1;
+    
+
+    // TODO: Add logic to handle page boundary
+
+    /*if (aligned_start_addr_d[AxiAddrWidth-1:12] != aligned_end_addr_d[AxiAddrWidth-1:12]) begin
+      aligned_end_addr_d        = {aligned_start_addr_d[AxiAddrWidth-1:12], 12'hFFF};
+      aligned_next_start_addr_d = {                       next_2page_msb_d, 12'h000};
+    end*/
+
+    // 1 - AXI bursts are at most 256 beats long.
+    burst_length = 256;
+    // 2 - The AXI burst length cannot be longer than the number of beats required
+    //     to access the memory regions between aligned_start_addr and
+    //     aligned_end_addr
+    
+    /* if (burst_length > ((aligned_end_addr_d[11:0] - aligned_start_addr_d[11:0]) >> size_axi) + 1)
+       burst_length = ((aligned_end_addr_d[11:0] - aligned_start_addr_d[11:0]) >> size_axi) + 1;
+    */
+    
+    if (burst_length > ((aligned_end_addr_d - aligned_start_addr_d) >> size_axi) + 1)
+      burst_length = ((aligned_end_addr_d - aligned_start_addr_d) >> size_axi) + 1;
+    len_r = burst_length - 1;
+    req_final.ar.len = len_r;
+
+    if (req_d.ar.len > len_r) begin
+      req_d.ar.addr = aligned_next_start_addr_d;
+      r_req_valid_d = 1'b1;
+    end else begin
+      r_req_valid_d = 1'b0;
+    end
+  end
+  ///////////////
+  // Set req out to req final generated above
+  axi_req_o.ar = req_final.ar;
+  axi_req_o.ar_valid = req_final.ar_valid;
+
   // b channel
   axi_req_o.b_ready = axi_req_i[0].b_ready;                                            
   // r channel
@@ -95,12 +173,7 @@ always_comb begin : p_global_ldst
     // aw
     axi_resp_o[i].aw_ready = axi_resp_i.aw_ready;
     // ar
-    axi_resp_o[i].ar_ready = axi_resp_i.ar_ready;
-    // w
-    // axi_resp_o[i].w_ready = axi_resp_i.w_ready & w_ready_d;
-    // r
-    // axi_resp_o[i].r = cluster_axi_resp_data_d[i].r;
-    // axi_resp_o[i].r_valid = cluster_axi_resp_data_d[i].r_valid;
+    axi_resp_o[i].ar_ready = axi_resp_i.ar_ready && r_req_ready;
   end
   
   ////////////// Handle BW mismatch between System and ARA for Read Responses

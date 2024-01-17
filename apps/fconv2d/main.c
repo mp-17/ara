@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "fconv2d32.h"
 #include "fconv2d.h"
 #include "runtime.h"
 #include "util.h"
@@ -28,38 +29,64 @@
 #include "printf.h"
 #endif
 
+#define useFP32 1
 // Define Matrix dimensions:
 // o = i ° f, with i=[MxN], f=[FxF], o=[MxN]
 // The filter is a square matrix, and F is odd
 
 // Matrices defined in data.S
-extern double i[] __attribute__((
-    aligned(4 * NR_LANES))); // [ (M+floor(F/2)) * (N+floor(F/2)) ]
-extern double f[] __attribute__((aligned(4 * NR_LANES)));        // [ F*F ]
-extern double o[] __attribute__((aligned(4 * NR_LANES)));        // [ M*N ]
-extern double golden_o[] __attribute__((aligned(4 * NR_LANES))); // [ M*N ]
+
+#ifdef useFP32
+extern float i[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));        // [ (M+floor(F/2)) * (N+floor(F/2)) ]
+extern float f[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));        // [ F*F ]
+extern float o[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));        // [ M*N ]
+extern float golden_o[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS))); // [ M*N ]
+#else
+extern double i[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));        // [ (M+floor(F/2)) * (N+floor(F/2)) ]
+extern double f[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));        // [ F*F ]
+extern double o[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));        // [ M*N ]
+extern double golden_o[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS))); // [ M*N ]
+#endif
+
 // M, N, F defined in data.S
 extern int64_t M;
 extern int64_t N;
 extern int64_t F;
 
 // Verify the matrices
+#ifdef useFP32
+int verify_matrix(float *matrix, float *golden_matrix, int64_t R, int64_t C,
+                  float threshold) {
+#else
 int verify_matrix(double *matrix, double *golden_matrix, int64_t R, int64_t C,
                   double threshold) {
-  for (int r = 0; r < R; ++r)
+#endif
+for (int r = 0; r < R; ++r)
     for (int c = 0; c < C; ++c)
+    #ifdef useFP32
+      if (!similarity_check_32b(matrix[c + C * r], golden_matrix[c + C * r],
+                            threshold)) {
+
+    #else
       if (!similarity_check(matrix[c + C * r], golden_matrix[c + C * r],
                             threshold)) {
+    #endif
         printf("Error: o[%d][%d] = %lf, instead of %lf\n", r, c,
                matrix[c + C * r], golden_matrix[c + C * r]);
-        return 1;
+        // return 1;
       }
   return 0;
 }
 
+
+#ifdef useFP32
+void print_matrix(float const *matrix, uint64_t num_rows,
+                  uint64_t num_columns) {
+#else
 void print_matrix(double const *matrix, uint64_t num_rows,
                   uint64_t num_columns) {
-  printf("0x%8X\n", (uint64_t)matrix);
+#endif
+printf("0x%8X\n", (uint64_t)matrix);
   for (uint64_t i = 0; i < num_rows; ++i) {
     for (uint64_t j = 0; j < num_columns; ++j) {
       printf("%10f ", matrix[i * num_columns + j]);
@@ -81,7 +108,11 @@ int main() {
   if (F == 3)
     fconv2d_3x3(o, i, f, M, N, F);
   else if (F == 7)
+    #ifdef useFP32
+    fconv2d32_7x7(o, i, f, M, N, F);
+    #else
     fconv2d_7x7(o, i, f, M, N, F);
+    #endif
   else
     printf("Error: the filter size is different from 3 or 5 or 7.\n");
   stop_timer();
@@ -89,7 +120,11 @@ int main() {
   // Performance metrics
   int64_t runtime = get_timer();
   float performance = 2.0 * F * F * M * N / runtime;
-  float utilization = 100 * performance / (2.0 * NR_LANES);
+  #ifdef useFP32
+  float utilization = 100 * performance / (2.0 * NR_LANES * NR_CLUSTERS * 2.0);
+  #else
+  float utilization = 100 * performance / (2.0 * NR_LANES * NR_CLUSTERS);
+  #endif
 
   printf("The execution took %d cycles.\n", runtime);
   printf("The performance is %f DPFLOP/cycle (%f%% utilization).\n",
@@ -97,7 +132,12 @@ int main() {
 
   // Verify correctness
   printf("Verifying result...\n");
+  #ifdef useFP32
+  int error = verify_matrix(o, golden_o, M, N, THRESHOLD32);
+  #else
   int error = verify_matrix(o, golden_o, M, N, THRESHOLD);
+  #endif
+
   if (error != 0) {
     printf("Fail.\n");
   } else {

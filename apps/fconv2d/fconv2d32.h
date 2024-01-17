@@ -37,7 +37,6 @@ void fconv2d32_7x7_block(float *o, float *i, float *f, int64_t R, int64_t C,
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 // Threshold for FP numbers comparison during the final check
-#define THRESHOLD 0.000000000001
-// #define THRESHOLD 0
+#define THRESHOLD32 0.0001
 
 #endif
