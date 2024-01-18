@@ -897,6 +897,48 @@ package ara_pkg;
    return element_shuffle_index[byte_index];*/
   endfunction : shuffle_index
 
+  // Function to find the offset to the vrf byte index 
+  // To support the Axi bandwidth lesser than 64*N bits. 
+  // The offsets below work for Cluster Axi bandwidth of 16*N, 32*N, 64*N.
+  function automatic vlen_t shuffle_offset(vlen_t vrf_idx, int NrLanes, rvv_pkg::vew_e ew);
+    vlen_t pnt_idx = vrf_idx >> $clog2(2*NrLanes);  // Dividing by 16N bits
+    unique case (ew)
+      rvv_pkg::EW64: begin
+        automatic vlen_t [3:0] off;
+        off[0] = 0;                    // From  0*N bits onwards use this offset
+        off[1] = 2 << $clog2(NrLanes); // From 16*N bits onwards use this offset
+        off[2] = 4 << $clog2(NrLanes); // From 32*N bits onwards use this offset
+        off[3] = 6 << $clog2(NrLanes); // From 48*N bits onwards use this offset
+        return off[pnt_idx[1:0]];
+      end
+      rvv_pkg::EW32: begin 
+        automatic vlen_t [3:0] off;
+        off[0] = 0;
+        off[1] = NrLanes==1 ? 2 : 4 << $clog2(NrLanes);
+        off[2] = 4; 
+        off[3] = off[0] + off[1];
+        return off[pnt_idx[1:0]];
+      end
+      rvv_pkg::EW16: begin 
+        automatic vlen_t [3:0] off;
+        off[0] = 0;
+        off[1] = 4;
+        off[2] = 2;
+        off[3] = 6;
+        return off[pnt_idx[1:0]];
+      end
+      rvv_pkg::EW8: begin 
+        automatic vlen_t [3:0] off;
+        off[0] = 0;
+        off[1] = 2;
+        off[2] = 1;
+        off[3] = 3;
+        return off[pnt_idx[1:0]];
+      end
+    endcase // ew
+  endfunction : shuffle_offset
+
+
   function automatic vlen_t deshuffle_index(vlen_t byte_index, int NrLanes, rvv_pkg::vew_e ew);
     // Generate the deshuffling of the table above
     unique case (NrLanes)
