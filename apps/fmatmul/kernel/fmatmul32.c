@@ -39,7 +39,10 @@ void fmatmul32(float *c, const float *a, const float *b,
   //   // we can use LMUL=4, having a vl of 256.
   //   fmatmul32_4x4(c, a, b, M, N, P);
   // }
-  fmatmul32_16x16(c, a, b, M, N, P);
+
+  // fmatmul32_16x16(c, a, b, M, N, P);
+  
+  fmatmul32_4x4(c, a, b, M, N, P);
 }
 
 // ---------------

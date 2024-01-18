@@ -66,8 +66,8 @@ module ara_cluster import ara_pkg::*; #(
   cluster_axi_req_t      [NrClusters-1:0] ara_axi_req, ara_axi_req_cut;
   cluster_axi_resp_t     [NrClusters-1:0] ara_axi_resp, ara_axi_resp_cut, ara_axi_resp_delay;
 
-  axi_req_t  axi_req_cut;
-  axi_resp_t axi_resp_cut;
+  axi_req_t  axi_req_cut, axi_req_align;
+  axi_resp_t axi_resp_cut, axi_resp_align;
 
   // Ring
   remote_data_t [NrClusters-1:0] ring_data_l, ring_data_r;
@@ -226,7 +226,6 @@ module ara_cluster import ara_pkg::*; #(
   assign axi_resp_cut[NrAxiCuts] = axi_resp_i;*/
 
   // Align stage
-
   align_stage #(
       .AxiDataWidth(AxiDataWidth),
       .AxiAddrWidth(AxiAddrWidth),
@@ -244,8 +243,27 @@ module ara_cluster import ara_pkg::*; #(
       .axi_req_i(axi_req_cut),
       .axi_resp_o(axi_resp_cut),
 
-      .axi_req_o(axi_req_o),
-      .axi_resp_i(axi_resp_i)
+      // .axi_req_o(axi_req_o),
+      // .axi_resp_i(axi_resp_i)
+      .axi_req_o(axi_req_align),
+      .axi_resp_i(axi_resp_align)
+  );
+
+  axi_cut #(
+    .ar_chan_t   (axi_ar_t     ),
+    .aw_chan_t   (axi_aw_t     ),
+    .b_chan_t    (axi_b_t      ),
+    .r_chan_t    (axi_r_t      ),
+    .w_chan_t    (axi_w_t      ),
+    .axi_req_t   (axi_req_t    ),
+    .axi_resp_t  (axi_resp_t   )
+  ) i_align_axi_cut (
+    .clk_i       (clk_i),
+    .rst_ni      (rst_ni),
+    .slv_req_i   (axi_req_align),
+    .slv_resp_o  (axi_resp_align),
+    .mst_req_o   (axi_req_o),
+    .mst_resp_i  (axi_resp_i)
   );
 
   assign acc_resp_o = acc_resp[0];

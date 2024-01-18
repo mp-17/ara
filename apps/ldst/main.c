@@ -32,8 +32,8 @@ extern _Float16 v16a[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), sect
 extern _Float16 v16b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
 extern int vsize;
 
-// #define LDST_TEST  1
-#define SLIDEDOWN_TEST 1
+#define LDST_TEST  1
+// #define SLIDEDOWN_TEST 1
 // #define SLIDEUP_TEST 1
 // #define REDUCTION_TEST 1
 
