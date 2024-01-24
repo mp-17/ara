@@ -624,10 +624,10 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
 
               // Account for the requested operands
               axi_addrgen_d.len = axi_addrgen_q.len -
-                ((aligned_end_addr_q[11:0] - axi_addrgen_q.addr[11:0] + 1)
+                ((aligned_end_addr_q - axi_addrgen_q.addr + 1) // ((aligned_end_addr_q[11:0] - axi_addrgen_q.addr[11:0] + 1)
                   >> int'(axi_addrgen_q.vew));
               if (axi_addrgen_q.len <
-                ((aligned_end_addr_q[11:0] - axi_addrgen_q.addr[11:0] + 1)
+                ((aligned_end_addr_q - axi_addrgen_q.addr + 1) // ((aligned_end_addr_q[11:0] - axi_addrgen_q.addr[11:0] + 1)
                   >> int'(axi_addrgen_q.vew)))
                 axi_addrgen_d.len = 0;
               axi_addrgen_d.addr = aligned_next_start_addr_q;

@@ -117,9 +117,9 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     .clk_i            (clk_i                 ),
     .rst_ni           (rst_ni                ),
     .acc_req_o        (acc_req               ),
-    .acc_resp_i       (acc_resp              ),
-    .acc_resp_valid_i (acc_resp_valid        ),
-    .acc_resp_ready_o (acc_resp_ready        )
+    .acc_resp_i       (acc_resp              )
+    // .acc_resp_valid_i (acc_resp_valid        ),
+    // .acc_resp_ready_o (acc_resp_ready        )
   );
 `else
   cva6 #(
@@ -186,7 +186,7 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
   );
 
   axi_inval_filter #(
-    .MaxTxns    (4                              ),
+    .MaxTxns    (16                             ),
     .AddrWidth  (AxiAddrWidth                   ),
     .L1LineWidth(ariane_pkg::DCACHE_LINE_WIDTH/8),
     .aw_chan_t  (ara_axi_aw_t                   ),

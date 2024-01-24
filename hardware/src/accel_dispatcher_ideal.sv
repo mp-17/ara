@@ -129,7 +129,7 @@ module accel_dispatcher_ideal import axi_pkg::*; import ara_pkg::*; (
   // Stop the computation when the instructions are over and ara has returned idle
   // Just check that we are after reset
   always_ff @(posedge clk_i) begin
-    if (rst_ni && was_reset && !acc_req_o.req_valid && i_system.i_ara.ara_idle) begin
+    if (rst_ni && was_reset && !acc_req_o.req_valid && i_system.i_ara_cluster.p_cluster[0].i_ara.ara_idle) begin
       $display("[hw-cycles]: %d", int'(perf_cnt_q));
       $display("[cva6-d$-stalls]: %d", int'(dut.dcache_stall_buf_q));
       $display("[cva6-i$-stalls]: %d", int'(dut.icache_stall_buf_q));

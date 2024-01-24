@@ -188,7 +188,7 @@ always_comb begin
     if (w_pnt_tracker_q == NumTrackers-1) begin 
       w_pnt_tracker_d = 0;
     end
-    cnt_tracker_d = cnt_tracker_q + 1;
+    cnt_tracker_d = cnt_tracker_d + 1;
   end
 
   // Update read pointer of each stage
@@ -202,7 +202,7 @@ always_comb begin
       // In the last stage, reset the shift enable for all stages
       if (s==0) begin
         tracker_d[r_pnt_tracker_q[s]].shift_en = '0;
-        cnt_tracker_d = cnt_tracker_q - 1;
+        cnt_tracker_d = cnt_tracker_d - 1;
       end
     end
   end

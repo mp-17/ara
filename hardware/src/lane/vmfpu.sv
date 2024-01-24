@@ -141,7 +141,7 @@ module vmfpu import ara_pkg::*; import rvv_pkg::*; import fpnew_pkg::*;
   //  Result queue  //
   ////////////////////
 
-  localparam int unsigned ResultQueueDepth = 2;
+  localparam int unsigned ResultQueueDepth = 4;
 
   // There is a result queue per VFU, holding the results that were not
   // yet accepted by the corresponding lane.

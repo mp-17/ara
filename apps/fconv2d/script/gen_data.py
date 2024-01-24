@@ -69,22 +69,24 @@ def emit(name, array, alignment='8'):
 
 # Define the filter size and the matrix dimension (max, for now, is 128 64-bit elements)
 if len(sys.argv) > 1:
-	matrix_width = int(sys.argv[1])
-	assert(matrix_width <= 128), "The width of the image cannot be greater than 128 64-bit \
-	                                  elements. If this is not enough, modify the algorithm."
-	f = int(sys.argv[2])
-	# Filter size must be odd
-	assert(f % 2 == 1), "The filter size must be an odd integer number"
+	# matrix_width = int(sys.argv[1])
+    row_size = int(sys.argv[1])
+    col_size = int(sys.argv[2])
+    f = int(sys.argv[3])
+    # Filter size must be odd
+    assert(f % 2 == 1), "The filter size must be an odd integer number"
 else:
-	matrix_width = 64
-	f = 7
+	# matrix_width = 64
+    row_size = 64
+    col_size = 64
+    f = 7
 
 #dtype=np.float64
 dtype=np.float32
 
 # Input image. Take a square image
-M = matrix_width
-N = matrix_width
+M = row_size # matrix_width
+N = col_size # matrix_width
 padding = int(f/2)
 M_pad = M + 2*padding
 N_pad = N + 2*padding
@@ -96,8 +98,8 @@ image = np.random.rand(M_pad, N_pad).astype(dtype)
 # image = np.ones((M_pad, N_pad)).astype(dtype)
 
 # Generate a random float64 filter
-gen_filter = np.random.rand(f, f).astype(dtype)
-# gen_filter = np.ones((f,f)).astype(dtype)
+# gen_filter = np.random.rand(f, f).astype(dtype)
+gen_filter = np.ones((f,f)).astype(dtype)
 
 # Create the empty o matrix
 empty_o = np.zeros((M, N)).astype(dtype)

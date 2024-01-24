@@ -52,7 +52,7 @@ void fconv2d32_7x7(float *o, float *i, float *f, int64_t M, int64_t N,
   unsigned long int block_size_n;
 
   // Set the vector configuration
-  asm volatile("vsetvli %0, %1, e32, m1, ta, ma" : "=r"(block_size_n) : "r"(N));
+  asm volatile("vsetvli %0, %1, e32, m2, ta, ma" : "=r"(block_size_n) : "r"(N));
 
   // Slice the matrix into a manageable number of columns n_
   for (unsigned long int n = 0; n < N; n += block_size_n) {
@@ -63,7 +63,7 @@ void fconv2d32_7x7(float *o, float *i, float *f, int64_t M, int64_t N,
     const float *i_ = i + n;
     float *o_ = o + n;
 
-    asm volatile("vsetvli zero, %0, e32, m1, ta, ma" ::"r"(n_));
+    asm volatile("vsetvli zero, %0, e32, m2, ta, ma" ::"r"(n_));
 
     fconv2d32_7x7_block(o_, i_, f, M, N, n_, F);
   }
