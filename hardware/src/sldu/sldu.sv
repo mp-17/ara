@@ -483,7 +483,6 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   cluster_reduction_rx_cnt_t cluster_red_cnt_d, cluster_red_cnt_q;
   logic bypass_d, bypass_q;
   logic sld_dir_ring;
-  logic use_ring_d, use_ring_q;
 
   logic is_edge_cluster, use_fifo_inp;
 
@@ -493,14 +492,12 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       ring_data_prev_valid_q <= 1'b0;
       cluster_red_cnt_q      <= '0;
       bypass_q               <= 1'b0;
-      use_ring_q             <= 1'b0;
       ring_cnt_q             <= '0;
     end else begin
       ring_data_prev_q       <= ring_data_prev_d;
       ring_data_prev_valid_q <= ring_data_prev_valid_d;
       cluster_red_cnt_q      <= cluster_red_cnt_d;
       bypass_q               <= bypass_d;
-      use_ring_q             <= use_ring_d;
       ring_cnt_q             <= ring_cnt_d;
     end
   end
@@ -580,7 +577,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     result_queue_write_pnt_q1 = result_queue_write_pnt_q2;
 
     cluster_red_cnt_d = cluster_red_cnt_q;
-    use_ring_d = use_ring_q;
+    slide_data_valid = 1'b0;
 
     /////////////////
     //  Slide FSM  //
@@ -647,7 +644,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
               out_pnt_d = '0;
 
               // Initialize issue cnt. Pretend to move NrLanes 64-bit elements for (clog2(NrLanes) + 1) times.
-              issue_cnt_d  = (NrLanes * ($clog2(NrLanes) + $clog2(NrClusters) + 1)) << EW64;
+              issue_cnt_d  = NrLanes * ($clog2(NrLanes) + $clog2(NrClusters) + 1 ) << EW64;
             end
           endcase
         end
@@ -700,7 +697,6 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
           if (vinsn_issue_q.op inside {VSLIDEUP, VSLIDEDOWN}) begin
             // Slide operation
             sldu_config_valid_o = 1'b1;
-            use_ring_d = 1'b1;
             if (fifo_ring_ready_inp) begin
               fifo_ring_out = vinsn_issue_q.op==VSLIDEDOWN ? sldu_operand[0] : sldu_operand[NrLanes-1];
               fifo_ring_valid_out = 1'b1;
@@ -714,22 +710,25 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
               // Put clusters other than 0 into bypass mode, if it has received all reduction packets.
               // This is because cluster 0 has to receive the last packet after all reductions are done.
               bypass_d = (ClusterId !=0) && (cluster_red_cnt_q == cluster_reduction_rx_cnt_init(NrClusters, ClusterId));
-              use_ring_d = !bypass_d;
+
               sldu_config_valid_o = 1'b1;
               sldu_bypass_o = bypass_d;
               
-              if (use_ring_d && fifo_ring_ready_inp) begin
-                fifo_ring_out = sldu_operand[NrLanes-1]; // sld_dir_ring ? sldu_operand[NrLanes-1] : sldu_operand[0];
+              if (!bypass_d && fifo_ring_ready_inp) begin
+                fifo_ring_out = sldu_operand[NrLanes-1];
                 fifo_ring_valid_out = 1'b1;
+
                 update_inp_op_pnt = 1'b1;
-              end else if (!use_ring_d) begin
+                cluster_red_cnt_d = cluster_red_cnt_q + 1;
+              end else if (bypass_d) begin
                 update_inp_op_pnt = 1'b1;
+                slide_data_valid = 1'b1;
               end
               
             end else begin
               // Inter lane reduction still in progress, so don't use ring yet
-              use_ring_d = 1'b0;
               update_inp_op_pnt = 1'b1;
+              slide_data_valid = 1'b1;
             end
           end
 
@@ -823,7 +822,6 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             // Send result to the VRF
             result_queue_cnt_d += 1;
 
-            // result_queue_valid_d[result_queue_write_pnt_q] = '1;
             result_queue_write_pnt_d = result_queue_write_pnt_q+1;
             if (result_queue_write_pnt_q == ResultQueueDepth-1)
               result_queue_write_pnt_d = '0;
@@ -1002,6 +1000,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
         // Trim vector elements which are not written by the slide unit
         if (vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].op == VSLIDEUP)
           commit_cnt_d -= vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].stride[$bits(commit_cnt_d)-1:0];
+
       end
     end
 
@@ -1014,9 +1013,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     // For the clusters at the edge (Cluster-0 or NrClusters-1), use the current ring data and previous ring data.
     // For the other clusters, set the input ring data to the edge lane of the current cluster.
     // If this is inter lane reduction, where ring is not needed, we just set data to valid.
-    slide_data_valid = 1'b0;
     
-    // edge_lane_id = (vinsn_issue_q.op==VSLIDEDOWN || vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu}) ? NrLanes-1 : 0;
     edge_lane_id = (vinsn_ring.op==VSLIDEDOWN || vinsn_ring.vfu inside {VFU_Alu, VFU_MFpu}) ? NrLanes-1 : 0;
 
     is_edge_cluster = (ClusterId == NrClusters-1 && vinsn_ring.op==VSLIDEDOWN) || (ClusterId==0 && vinsn_ring.op==VSLIDEUP); 
@@ -1027,62 +1024,52 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       use_fifo_inp = 1'b0;
     end
 
-    if (use_ring_d) begin
-      if (fifo_ring_valid_inp && use_fifo_inp) begin
-            // We have a valid ring packet
-            ring_data_prev_d = fifo_ring_inp;
-            ring_data_prev_valid_d = 1'b1;
+    if (fifo_ring_valid_inp && use_fifo_inp) begin
+          // We have a valid ring packet
+          ring_data_prev_d = fifo_ring_inp;
+          ring_data_prev_valid_d = 1'b1;
+          
+          // For the edge clusters, We need to have the current ring packet and the previous ring packet
+          if (is_edge_cluster) begin
             
-            // For the edge clusters, We need to have the current ring packet and the previous ring packet
-            if (is_edge_cluster) begin
-              
-              if (ring_data_prev_valid_q) begin
-                result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {fifo_ring_inp[31:0] , ring_data_prev_q[63:32]};
-                slide_data_valid = 1'b1;
-              end else begin
-                if (vinsn_ring.op==VSLIDEDOWN) begin
-                  // Slidedown needs to wait for 1 more ring packet, so don't update pnt
-                  slide_data_valid = 1'b0;
-                end else if (vinsn_ring.op==VSLIDEUP) begin
-                  // For the 1st packet, we can write only the current ring input and the first 32-bits is filled with scalar op later
-                  result_queue_d[result_queue_write_pnt_q2][0].wdata[63:32] = {fifo_ring_inp[31:0]};
-                  slide_data_valid = 1'b1;
-                end
-              end
-            
-            end else begin
-              // If cluster received a ring packet for reduction, update counter
-              if (vinsn_ring.vfu inside {VFU_Alu, VFU_MFpu}) begin
-                cluster_red_cnt_d = cluster_red_cnt_q + 1;
-
-                // If this is the last transfer, Cluster-0 should receive data into Lane-0 from Lane-(NrLanes-1) of Cluster-(NrCluster-1)
-                if (ClusterId==0 && ring_cnt_q==8*NrLanes)
-                  result_queue_d[result_queue_write_pnt_q2][0].wdata = fifo_ring_inp;
-                else 
-                  result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = fifo_ring_inp;
-              end else begin
-                // Slides for non-edge clusters
-                result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = fifo_ring_inp;
-              end
+            if (ring_data_prev_valid_q) begin
+              result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {fifo_ring_inp[31:0] , ring_data_prev_q[63:32]};
               slide_data_valid = 1'b1;
+            end else begin
+              if (vinsn_ring.op==VSLIDEDOWN) begin
+                // Slidedown needs to wait for 1 more ring packet, so don't update pnt
+                slide_data_valid = 1'b0;
+              end else if (vinsn_ring.op==VSLIDEUP) begin
+                // For the 1st packet, we can write only the current ring input and the first 32-bits is filled with scalar op later
+                result_queue_d[result_queue_write_pnt_q2][0].wdata[63:32] = {fifo_ring_inp[31:0]};
+                slide_data_valid = 1'b1;
+              end
             end
-            fifo_ring_ready_out = 1'b1;  // Acknowledge fifo that data has been accepted.
-      end else begin
-          // For the last data for slide1down use the scalar op
-          if (ClusterId == NrClusters-1 && vinsn_ring.op==VSLIDEDOWN && (ring_cnt_q <= 8*NrLanes) && ring_data_prev_valid_q) begin
-            result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {vinsn_ring.scalar_op[31:0] , ring_data_prev_q[63:32]};
+          
+          end else begin
+            // If cluster received a ring packet for reduction, update counter
+            if (vinsn_ring.vfu inside {VFU_Alu, VFU_MFpu}) begin
+              
+              // If this is the last transfer, Cluster-0 should receive data into Lane-0 from Lane-(NrLanes-1) of Cluster-(NrCluster-1)
+              if (ClusterId==0 && ring_cnt_q==8*NrLanes)
+                result_queue_d[result_queue_write_pnt_q2][0].wdata = fifo_ring_inp;
+              else 
+                result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = fifo_ring_inp;
+            end else begin
+              // Slides for non-edge clusters
+              result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = fifo_ring_inp;
+            end
             slide_data_valid = 1'b1;
-            ring_data_prev_d = '0; 
-            ring_data_prev_valid_d = 1'b0;
           end
-      end
-    end else if (!use_ring_d) begin
-
-      // Inter lane reduction that doesn't use ring, set data to valid
-      if ((vinsn_ring.vfu inside {VFU_Alu, VFU_MFpu}) && 
-                (ring_cnt_q > NrLanes * ($clog2(NrClusters)+1) << EW64)) begin
+          fifo_ring_ready_out = 1'b1;  // Acknowledge fifo that data has been accepted.
+    end else begin
+        // For the last data for slide1down use the scalar op
+        if (ClusterId == NrClusters-1 && vinsn_ring.op==VSLIDEDOWN && (ring_cnt_q <= 8*NrLanes) && ring_data_prev_valid_q) begin
+          result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {vinsn_ring.scalar_op[31:0] , ring_data_prev_q[63:32]};
           slide_data_valid = 1'b1;
-      end 
+          ring_data_prev_d = '0; 
+          ring_data_prev_valid_d = 1'b0;
+        end
     end
 
     // Set the data to valid to be sent to the VRF
@@ -1108,11 +1095,11 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
         if (vinsn_queue_d.ring_cnt != '0) begin
           ring_cnt_d = vinsn_queue_q.vinsn[vinsn_queue_d.ring_pnt].op inside {VSLIDEUP, VSLIDEDOWN}
                         ? vinsn_queue_q.vinsn[vinsn_queue_d.ring_pnt].vl << int'(vinsn_queue_q.vinsn[vinsn_queue_d.ring_pnt].vtype.vsew)
-                        : (NrLanes * ($clog2(NrLanes) + 1)) << EW64;
+                        : (NrLanes * ($clog2(NrLanes))) << EW64;
 
           // Add packets for inter cluster reduction
           if (vinsn_queue_q.vinsn[vinsn_queue_d.ring_pnt].vfu inside {VFU_Alu, VFU_MFpu}) begin
-            ring_cnt_d += (NrLanes * ($clog2(NrClusters))) << EW64;
+            ring_cnt_d += (NrLanes * ($clog2(NrClusters) + 1)) << EW64;
           end
 
           // Trim vector elements which are not written by the slide unit
@@ -1142,13 +1129,12 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       if (vinsn_queue_d.commit_cnt == '0) begin
         commit_cnt_d = pe_req_i.op inside {VSLIDEUP, VSLIDEDOWN}
                      ? pe_req_i.vl << int'(pe_req_i.vtype.vsew)
-                     : (NrLanes * ($clog2(NrLanes) + 1)) << EW64;
+                     : (NrLanes * ($clog2(NrLanes))) << EW64;
 
         // Add packets for inter cluster reduction
         if (pe_req_i.vfu inside {VFU_Alu, VFU_MFpu}) begin 
-          commit_cnt_d += (NrLanes * ($clog2(NrClusters))) << EW64; 
+          commit_cnt_d += (NrLanes * ($clog2(NrClusters) + 1)) << EW64;
         end
-
 
         // Trim vector elements which are not written by the slide unit
         // VSLIDE1UP always writes at least 1 element
@@ -1157,9 +1143,22 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
         end
       end
 
-      // Set ring counter for the instruction
+      // Set expected ring counter packets for the instruction
       if (vinsn_queue_d.ring_cnt == '0) begin
-        ring_cnt_d = commit_cnt_d;
+        ring_cnt_d = pe_req_i.op inside {VSLIDEUP, VSLIDEDOWN}
+                     ? pe_req_i.vl << int'(pe_req_i.vtype.vsew)
+                     : (NrLanes * ($clog2(NrLanes))) << EW64;
+
+        // Add packets for inter cluster reduction
+        if (pe_req_i.vfu inside {VFU_Alu, VFU_MFpu}) begin 
+          ring_cnt_d += (NrLanes * ($clog2(NrClusters) + 1)) << EW64;
+        end
+
+        // Trim vector elements which are not written by the slide unit
+        // VSLIDE1UP always writes at least 1 element
+        if (pe_req_i.op == VSLIDEUP && !pe_req_i.use_scalar_op) begin
+          ring_cnt_d -= vinsn_queue_d.vinsn[vinsn_queue_q.accept_pnt].stride[$bits(ring_cnt_d)-1:0];
+        end
       end
 
       // Bump pointers and counters of the vector instruction queue

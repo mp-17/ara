@@ -164,7 +164,7 @@ module ara_testharness #(
     if (runtime_cnt_en_q)
       // Stop counting only if the software disabled the counter and Ara returned idle
       // runtime_cnt_en_d = cnt_en_mask | ~i_ara_soc.i_system.i_ara.ara_idle;
-      runtime_cnt_en_d = cnt_en_mask & ~i_ara_soc.i_system.i_ara_cluster.p_cluster[0].i_ara.ara_idle; // TODO : Verify this!
+      runtime_cnt_en_d = cnt_en_mask & ~i_ara_soc.i_system.i_ara_cluster.p_cluster[0].i_ara_macro.i_ara.ara_idle; // TODO : Verify this!
   end
 
   // Vector runtime counter
@@ -194,7 +194,7 @@ module ara_testharness #(
     //     i_ara_soc.i_system.i_ara.ara_idle &&
     //     !i_ara_soc.i_system.i_ara.acc_req_i.req_valid) begin
     if (runtime_to_be_updated_q           &&
-        i_ara_soc.i_system.i_ara_cluster.p_cluster[0].i_ara.ara_idle &&
+        i_ara_soc.i_system.i_ara_cluster.p_cluster[0].i_ara_macro.i_ara.ara_idle &&
         !i_ara_soc.i_system.i_ara_cluster.acc_req_i.req_valid) begin
       runtime_buf_d = runtime_cnt_q;
       runtime_to_be_updated_d = 1'b0;
@@ -253,7 +253,7 @@ module ara_testharness #(
     //     i_ara_soc.i_system.i_ara.ara_idle &&
     //     !i_ara_soc.i_system.i_ara.acc_req_i.req_valid) begin
     if (runtime_to_be_updated_q           &&
-        i_ara_soc.i_system.i_ara_cluster.p_cluster[0].i_ara.ara_idle &&
+        i_ara_soc.i_system.i_ara_cluster.p_cluster[0].i_ara_macro.i_ara.ara_idle &&
         !i_ara_soc.i_system.i_ara_cluster.acc_req_i.req_valid) begin
       dcache_stall_buf_d = dcache_stall_cnt_q;
       icache_stall_buf_d = icache_stall_cnt_q;

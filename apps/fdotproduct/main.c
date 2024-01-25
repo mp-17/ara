@@ -126,6 +126,19 @@ int main() {
         }
       }
     }
+
+    // Dotproduct Arithmetic intensity calculation
+    // Ops = 2N FP32 ops 
+    // Bytes = 2N * 4B = 8N Bytes , AI = 1/4 FP32 Op/B
+    // BW = 32N bits/ cycle = 4N Bytes
+    // Max Perf = N * 2 * 2 FP32op/cycle = 4N FP32 op/cycle
+    // From roofline max perf at the arithmetic intensity = N FP32 op/cycle
+    float performance = avl * 1.0 / runtime_v;
+    float utilization = 100.0 * performance / (NR_LANES * NR_CLUSTERS);
+    printf("The execution took %d cycles.\n", runtime_v);
+    printf("The performance is %f FLOP/cycle (%f%% utilization).\n",
+           performance, utilization);
+
   // }
   
   /*
