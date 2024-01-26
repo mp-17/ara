@@ -77,7 +77,6 @@ module ara_cluster import ara_pkg::*; #(
       ara_macro #(
         .NrLanes           (NrLanes             ), 
         .NrClusters        (NrClusters          ),
-        .ClusterId         (cluster             ),
         .FPUSupport        (FPUSupport          ),
         .FPExtSupport      (FPExtSupport        ),
         .FixPtSupport      (FixPtSupport        ),
@@ -94,9 +93,13 @@ module ara_cluster import ara_pkg::*; #(
       ) i_ara_macro (
         .clk_i             (clk_i               ),
         .rst_ni            (rst_ni              ),
+
         .scan_enable_i     (scan_enable_i       ),
         .scan_data_i       (scan_data_i         ),
         .scan_data_o       (/* Unused */        ),
+
+        // Id
+        .cluster_id_i      (cluster[cf_math_pkg::idx_width(NrClusters)-1:0]            ),
 
         // Interface with Ariane
         .acc_req_i         (acc_req_i           ),

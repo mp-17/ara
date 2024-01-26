@@ -11,7 +11,6 @@ module vmfpu import ara_pkg::*; import rvv_pkg::*; import fpnew_pkg::*;
   import cf_math_pkg::idx_width; #(
     parameter  int           unsigned NrLanes      = 0,
     parameter  int           unsigned NrClusters   = 0,
-    parameter  int           unsigned ClusterId    = 0,
     // Support for floating-point data types
     parameter  fpu_support_e          FPUSupport   = FPUSupportHalfSingleDouble,
     // External support for vfrec7, vfrsqrt7, rounding-toward-odd
@@ -28,6 +27,7 @@ module vmfpu import ara_pkg::*; import rvv_pkg::*; import fpnew_pkg::*;
     input  logic                         clk_i,
     input  logic                         rst_ni,
     input  logic[idx_width(NrLanes)-1:0] lane_id_i,
+    input  logic[idx_width(NrClusters)-1:0] cluster_id_i,
     // Interface with Dispatcher
     output logic                         mfpu_vxsat_o,
     input  vxrm_t                        mfpu_vxrm_i,
@@ -2025,7 +2025,7 @@ module vmfpu import ara_pkg::*; import rvv_pkg::*; import fpnew_pkg::*;
           first_op_d         = 1'b1;
           reduction_rx_cnt_d = reduction_rx_cnt_init(NrLanes, lane_id_i); // Inter Lane
           if (lane_id_i == NrLanes-1)
-            reduction_rx_cnt_d += reduction_rx_cnt_init(NrClusters, ClusterId); // Inter cluster
+            reduction_rx_cnt_d += reduction_rx_cnt_init(NrClusters, cluster_id_i); // Inter cluster
           sldu_transactions_cnt_d = $clog2(NrLanes) + $clog2(NrClusters) + 1;
 
           // Allow the first valid
@@ -2106,7 +2106,7 @@ module vmfpu import ara_pkg::*; import rvv_pkg::*; import fpnew_pkg::*;
           first_op_d         = 1'b1;
           reduction_rx_cnt_d = reduction_rx_cnt_init(NrLanes, lane_id_i); // Inter Lane
           if (lane_id_i == NrLanes-1)
-            reduction_rx_cnt_d += reduction_rx_cnt_init(NrClusters, ClusterId); // Inter Cluster
+            reduction_rx_cnt_d += reduction_rx_cnt_init(NrClusters, cluster_id_i); // Inter Cluster
           sldu_transactions_cnt_d = $clog2(NrLanes) + $clog2(NrClusters) + 1;
 
           // Allow the first valid
@@ -2144,7 +2144,7 @@ module vmfpu import ara_pkg::*; import rvv_pkg::*; import fpnew_pkg::*;
         first_op_d              = 1'b1;
         reduction_rx_cnt_d      = reduction_rx_cnt_init(NrLanes, lane_id_i); // Inter Lane
         if (lane_id_i == NrLanes-1)
-           reduction_rx_cnt_d += reduction_rx_cnt_init(NrClusters, ClusterId); // Inter Cluster
+           reduction_rx_cnt_d += reduction_rx_cnt_init(NrClusters, cluster_id_i); // Inter Cluster
         sldu_transactions_cnt_d = $clog2(NrLanes) + $clog2(NrClusters) + 1;
 
         // Allow the first valid

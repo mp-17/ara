@@ -10,7 +10,6 @@
 module sldu import ara_pkg::*; import rvv_pkg::*; #(
     parameter  int  unsigned NrLanes   = 0,
     parameter  int  unsigned NrClusters= 0,
-    parameter  int  unsigned ClusterId = 0,
     parameter  type          vaddr_t = logic, // Type used to address vector register file elements
     // Dependant parameters. DO NOT CHANGE!
     localparam int  unsigned DataWidth = $bits(elen_t), // Width of the lane datapath
@@ -20,6 +19,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   ) (
     input  logic                   clk_i,
     input  logic                   rst_ni,
+    // Id
+    input  logic     [cf_math_pkg::idx_width(NrClusters)-1:0] cluster_id_i,
     // Interface with the main sequencer
     input  pe_req_t                pe_req_i,
     input  logic                   pe_req_valid_i,
@@ -709,7 +710,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
               
               // Put clusters other than 0 into bypass mode, if it has received all reduction packets.
               // This is because cluster 0 has to receive the last packet after all reductions are done.
-              bypass_d = (ClusterId !=0) && (cluster_red_cnt_q == cluster_reduction_rx_cnt_init(NrClusters, ClusterId));
+              bypass_d = (cluster_id_i !=0) && (cluster_red_cnt_q == cluster_reduction_rx_cnt_init(cluster_id_i));
 
               sldu_config_valid_o = 1'b1;
               sldu_bypass_o = bypass_d;
@@ -743,7 +744,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             state_d = SLIDE_RUN;
 
           // If this is a vslide1up instruction, copy the scalar operand to the first word
-          if (state_q == SLIDE_RUN_VSLIDE1UP_FIRST_WORD && ClusterId==0) begin
+          if (state_q == SLIDE_RUN_VSLIDE1UP_FIRST_WORD && cluster_id_i==0) begin
             /*unique case (vinsn_issue_q.vtype.vsew)
               EW8: begin
                 result_queue_d[result_queue_write_pnt_q][0].wdata[7:0] =
@@ -1016,7 +1017,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     
     edge_lane_id = (vinsn_ring.op==VSLIDEDOWN || vinsn_ring.vfu inside {VFU_Alu, VFU_MFpu}) ? NrLanes-1 : 0;
 
-    is_edge_cluster = (ClusterId == NrClusters-1 && vinsn_ring.op==VSLIDEDOWN) || (ClusterId==0 && vinsn_ring.op==VSLIDEUP); 
+    is_edge_cluster = (cluster_id_i == NrClusters-1 && vinsn_ring.op==VSLIDEDOWN) || (cluster_id_i==0 && vinsn_ring.op==VSLIDEUP); 
     
     // For the edge cluster alone, for slidedown, the last 8*NrLanes bytes should not be ring but from previous ring packet and scalar operand.
     use_fifo_inp = 1'b1;
@@ -1051,7 +1052,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             if (vinsn_ring.vfu inside {VFU_Alu, VFU_MFpu}) begin
               
               // If this is the last transfer, Cluster-0 should receive data into Lane-0 from Lane-(NrLanes-1) of Cluster-(NrCluster-1)
-              if (ClusterId==0 && ring_cnt_q==8*NrLanes)
+              if (cluster_id_i==0 && ring_cnt_q==8*NrLanes)
                 result_queue_d[result_queue_write_pnt_q2][0].wdata = fifo_ring_inp;
               else 
                 result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = fifo_ring_inp;
@@ -1064,7 +1065,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
           fifo_ring_ready_out = 1'b1;  // Acknowledge fifo that data has been accepted.
     end else begin
         // For the last data for slide1down use the scalar op
-        if (ClusterId == NrClusters-1 && vinsn_ring.op==VSLIDEDOWN && (ring_cnt_q <= 8*NrLanes) && ring_data_prev_valid_q) begin
+        if (cluster_id_i == NrClusters-1 && vinsn_ring.op==VSLIDEDOWN && (ring_cnt_q <= 8*NrLanes) && ring_data_prev_valid_q) begin
           result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {vinsn_ring.scalar_op[31:0] , ring_data_prev_q[63:32]};
           slide_data_valid = 1'b1;
           ring_data_prev_d = '0; 
@@ -1176,8 +1177,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   //         Since 0 is not in bypass 3->0, 0->1 also happens. But the FPU in last lane of cluster-0 and 1, receiving data from SLDU ignores it.
   //         This is tracked by the reduction_rx_cnt_d in FPU. 
   // Last-Step: Finally 3 sends result to 1.
-  function automatic cluster_reduction_rx_cnt_t cluster_reduction_rx_cnt_init(int unsigned NrClusters, int ClusterId);
-    case (ClusterId)
+  function automatic cluster_reduction_rx_cnt_t cluster_reduction_rx_cnt_init(logic[3:0] clusterId);
+    case (clusterId)
       0:  cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(1);
       1:  cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(2);
       2:  cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(1);

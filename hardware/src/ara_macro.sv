@@ -10,7 +10,6 @@ module ara_macro import ara_pkg::*; #(
     // RVV Parameters
     parameter  int           unsigned NrLanes      = 0,   // Number of parallel vector lanes per Ara instance
     parameter  int           unsigned NrClusters   = 0,   // Number of Ara instances
-    parameter  int           unsigned ClusterId    = 0,
 
     // Support for floating-point data types
     parameter  fpu_support_e          FPUSupport   = FPUSupportHalfSingleDouble,
@@ -47,6 +46,9 @@ module ara_macro import ara_pkg::*; #(
     input  logic              scan_enable_i,
     input  logic              scan_data_i,
     output logic              scan_data_o,
+
+    // Id
+    input  logic     [cf_math_pkg::idx_width(NrClusters)-1:0] cluster_id_i,
 
     // Interface with Ariane
     input  accelerator_req_t  acc_req_i,
@@ -87,7 +89,6 @@ module ara_macro import ara_pkg::*; #(
   ara #(
     .NrLanes     (NrLanes             ),
     .NrClusters  (NrClusters          ),
-    .ClusterId   (ClusterId           ),
     .FPUSupport  (FPUSupport          ),
     .FPExtSupport(FPExtSupport        ),
     .FixPtSupport(FixPtSupport        ),
@@ -106,6 +107,8 @@ module ara_macro import ara_pkg::*; #(
     .scan_enable_i   (scan_enable_i    ),
     .scan_data_i     (1'b0             ),
     .scan_data_o     (/* Unused */     ),
+    
+    .cluster_id_i    (cluster_id_i     ),
     .acc_req_i       (acc_req_i        ),
     .acc_resp_o      (acc_resp_o       ),
     .axi_req_o       (ara_axi_req      ),

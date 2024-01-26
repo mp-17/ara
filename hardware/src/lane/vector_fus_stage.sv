@@ -10,7 +10,6 @@
 module vector_fus_stage import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx_width; #(
     parameter  int           unsigned NrLanes      = 0,
     parameter  int           unsigned NrClusters   = 0,
-    parameter  int           unsigned ClusterId    = 0,
     // Support for floating-point data types
     parameter  fpu_support_e          FPUSupport   = FPUSupportHalfSingleDouble,
     // External support for vfrec7, vfrsqrt7
@@ -26,6 +25,7 @@ module vector_fus_stage import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg
     input  logic                              clk_i,
     input  logic                              rst_ni,
     input  logic [idx_width(NrLanes)-1:0]     lane_id_i,
+    input  logic [idx_width(NrClusters)-1:0]  cluster_id_i,
     // Interface with Dispatcher
     output logic                              vxsat_flag_o,
     input  vxrm_t                             alu_vxrm_i,
@@ -149,7 +149,6 @@ module vector_fus_stage import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg
   vmfpu #(
     .NrLanes    (NrLanes   ),
     .NrClusters (NrClusters),
-    .ClusterId  (ClusterId),
     .FPUSupport(FPUSupport),
     .FPExtSupport(FPExtSupport),
     .FixPtSupport(FixPtSupport),
@@ -158,6 +157,7 @@ module vector_fus_stage import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg
     .clk_i                (clk_i                           ),
     .rst_ni               (rst_ni                          ),
     .lane_id_i            (lane_id_i                       ),
+    .cluster_id_i         (cluster_id_i                    ),
     // Interface with Dispatcher
     .mfpu_vxsat_o         (mfpu_vxsat                      ),
     .mfpu_vxrm_i          (alu_vxrm_i                      ),

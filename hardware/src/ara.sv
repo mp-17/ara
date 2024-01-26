@@ -10,7 +10,6 @@ module ara import ara_pkg::*; #(
     // RVV Parameters
     parameter  int           unsigned NrLanes      = 0,                          // Number of parallel vector lanes.
     parameter  int           unsigned NrClusters   = 0,
-    parameter  int           unsigned ClusterId    = 0,
     // Support for floating-point data types
     parameter  fpu_support_e          FPUSupport   = FPUSupportHalfSingleDouble,
     // External support for vfrec7, vfrsqrt7
@@ -44,6 +43,8 @@ module ara import ara_pkg::*; #(
     input  logic              scan_enable_i,
     input  logic              scan_data_i,
     output logic              scan_data_o,
+    // Id
+    input  logic     [cf_math_pkg::idx_width(NrClusters)-1:0] cluster_id_i,
     // Interface with Ariane
     input  accelerator_req_t  acc_req_i,
     output accelerator_resp_t acc_resp_o,
@@ -252,7 +253,6 @@ module ara import ara_pkg::*; #(
     lane #(
       .NrLanes     (NrLanes     ),
       .NrClusters  (NrClusters  ),
-      .ClusterId   (ClusterId   ),
       .FPUSupport  (FPUSupport  ),
       .FPExtSupport(FPExtSupport),
       .FixPtSupport(FixPtSupport)
@@ -263,6 +263,7 @@ module ara import ara_pkg::*; #(
       .scan_data_i                     (1'b0                                ),
       .scan_data_o                     (/* Unused */                        ),
       .lane_id_i                       (lane[idx_width(NrLanes)-1:0]        ),
+      .cluster_id_i                    (cluster_id_i                        ),
       // Interface with the dispatcher
       .vxsat_flag_o                    (vxsat_flag[lane]                    ),
       .alu_vxrm_i                      (alu_vxrm[lane]                      ),
@@ -398,11 +399,12 @@ module ara import ara_pkg::*; #(
   sldu #(
     .NrLanes(NrLanes),
     .NrClusters(NrClusters),
-    .ClusterId(ClusterId),
     .vaddr_t(vaddr_t)
   ) i_sldu (
     .clk_i                   (clk_i                            ),
     .rst_ni                  (rst_ni                           ),
+    // Id
+    .cluster_id_i            (cluster_id_i                     ),
     // Interface with the main sequencer
     .pe_req_i                (pe_req                           ),
     .pe_req_valid_i          (pe_req_valid                     ),
