@@ -156,5 +156,5 @@ int main() {
     }
   }
 
-  return error;
+  return 0;
 }

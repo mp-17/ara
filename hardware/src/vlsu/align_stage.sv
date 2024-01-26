@@ -74,8 +74,10 @@ always_ff @(posedge clk_i or negedge rst_ni) begin
     data_prev_q       <= '0;
     data_prev_valid_q <= 1'b0;
     last_q            <= 1'b0;
-    be_q              <= '0;
-    be_final_q        <= '0; 
+    be_final_q        <= '0;
+    for (int s=0; s<NumStages; s++) begin 
+      be_q[s]         <= '0;
+    end
   end else begin
     tracker_q         <= tracker_d;
     w_pnt_tracker_q   <= w_pnt_tracker_d;
@@ -84,8 +86,11 @@ always_ff @(posedge clk_i or negedge rst_ni) begin
     data_prev_q       <= data_prev_d;
     data_prev_valid_q <= data_prev_valid_d;
     last_q            <= last_d;
-    be_q              <= be_d;
     be_final_q        <= be_final_d;
+    for (int s=0; s<NumStages; s++) begin 
+      be_q[s]         <= be_d[s];
+    end
+    
   end
 end
 
