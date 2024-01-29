@@ -61,7 +61,11 @@ module ara_cluster import ara_pkg::*; #(
     output axi_req_t          axi_req_o,
     input  axi_resp_t         axi_resp_i
   );
-  accelerator_resp_t [NrClusters-1:0] acc_resp; 
+  accelerator_req_t [NrClusters-1:0] acc_req;
+  logic req_ready, resp_valid;
+
+  accelerator_resp_t [NrClusters-1:0] acc_resp;
+  accelerator_resp_t acc_resp_d, acc_resp_q;
 
   cluster_axi_req_t      [NrClusters-1:0] ara_axi_req, ara_axi_req_cut;
   cluster_axi_resp_t     [NrClusters-1:0] ara_axi_resp, ara_axi_resp_cut;
@@ -72,6 +76,12 @@ module ara_cluster import ara_pkg::*; #(
   // Ring connections
   remote_data_t [NrClusters-1:0] ring_data_l, ring_data_r; 
   logic [NrClusters-1:0] ring_data_l_ready, ring_data_l_valid, ring_data_r_ready, ring_data_r_valid; 
+
+  // Synchronization of Responses
+  typedef logic [NrVFUs-1:0] vfu_mask; 
+  vfu_mask [NrClusters-1:0] pe_compl_in, pe_compl_sync; 
+  vfu_mask [NrClusters-1:0] pe_compl_d, pe_compl_q;
+  vfu_mask resp_ready;
 
   for (genvar cluster=0; cluster < NrClusters; cluster++) begin : p_cluster 
       ara_macro #(
@@ -102,7 +112,7 @@ module ara_cluster import ara_pkg::*; #(
         .cluster_id_i      (cluster[cf_math_pkg::idx_width(NrClusters)-1:0]            ),
 
         // Interface with Ariane
-        .acc_req_i         (acc_req_i           ),
+        .acc_req_i         (acc_req [cluster]   ),
         .acc_resp_o        (acc_resp[cluster]   ),
 
         // AXI interface
@@ -124,7 +134,11 @@ module ara_cluster import ara_pkg::*; #(
 
         .ring_data_l_o       (ring_data_l        [cluster]                                       ),
         .ring_data_l_valid_o (ring_data_l_valid  [cluster]                                       ),
-        .ring_data_l_ready_i (ring_data_l_ready  [cluster == 0 ? NrClusters-1 : cluster - 1]     ) 
+        .ring_data_l_ready_i (ring_data_l_ready  [cluster == 0 ? NrClusters-1 : cluster - 1]     ),
+
+        // Interface for synchronization
+        .pe_compl_i          (pe_compl_sync [cluster]        ),
+        .pe_compl_o          (pe_compl_in   [cluster]        )
       );
   end
 
@@ -186,7 +200,64 @@ module ara_cluster import ara_pkg::*; #(
     .mst_req_o   (axi_req_o),
     .mst_resp_i  (axi_resp_i)
   );
+  
+  // Synchronizing requests among clusters
+  // Need to distribut a CVA6 request to all clusters
+  // Should happen only when all clusters are ready to receive the request
+  // This is implemented by using a stream fork module
+  logic [NrClusters-1:0] acc_req_ready, acc_req_valid;
+  logic acc_req_ready_o, acc_req_valid_i; 
 
-  assign acc_resp_o = acc_resp[0];
+  stream_fork #(
+    .N_OUP(NrClusters)
+    ) i_request_fork (
+    .clk_i  (clk_i),
+    .rst_ni (rst_ni),
+    // To Clusters
+    .valid_i(acc_req_valid_i),
+    .ready_o(acc_req_ready_o),
+    // To CVA6
+    .valid_o(acc_req_valid),
+    .ready_i(acc_req_ready)
+  );
+
+  always_comb begin
+    // Implementation of Request Synchronization
+    for (int c=0; c<NrClusters; c++) begin
+      acc_req[c] = acc_req_i;
+      acc_req[c].req_valid = acc_req_valid[c];
+      acc_req_ready[c] = acc_resp[c].req_ready;
+    end
+
+    acc_req_valid_i = acc_req_i.req_valid;
+    acc_resp_o = acc_resp[0];
+    acc_resp_o.req_ready = acc_req_ready_o;
+
+    /*
+    // Synchronization of Request completion
+    // Not used for the moment
+    pe_compl_d = pe_compl_q;
+    pe_compl_sync = '0;
+    resp_ready = '1;
+    for (int c=0; c<NrClusters; c++) begin
+      pe_compl_d[c] |= pe_compl_in[c];
+
+      resp_ready &= pe_compl_d[c];
+    end
+
+    for (int c=0; c<NrClusters; c++) begin
+      pe_compl_sync[c] = resp_ready;
+      pe_compl_d[c] &= ~resp_ready;
+    end
+    */
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if(~rst_ni) begin
+      pe_compl_q <= '0;
+    end else begin
+      pe_compl_q <= pe_compl_d;
+    end
+  end
 
 endmodule : ara_cluster

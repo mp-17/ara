@@ -24,6 +24,9 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     output ara_resp_t                       ara_resp_o,
     output logic                            ara_resp_valid_o,
     output logic                            ara_idle_o,
+    // Interface with synchronizer 
+    input logic [NrVFUs-1:0]                 pe_compl_i, 
+    output logic [NrVFUs-1:0]                pe_compl_o,
     // Interface with the processing elements
     output pe_req_t                         pe_req_o,
     output logic                            pe_req_valid_o,
@@ -253,6 +256,23 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   // Update the token only upon new instructions
   assign ara_req_token_d = (ara_req_valid_i) ? ara_req_i.token : ara_req_token_q;
 
+  /////// For synchronization
+  
+  pe_resp_t [NrPEs-1:0] pe_resp_d, pe_resp_q;
+  logic [NrVFUs-1:0] sync_d, sync_q;
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if(~rst_ni) begin
+      sync_q <= '1;
+      pe_resp_q <= '0;
+    end else begin
+      sync_q <= sync_d;
+      pe_resp_q <= pe_resp_d;
+    end
+  end
+
+  ///////
+
   always_comb begin: p_sequencer
     // Default assignments
     state_d               = state_q;
@@ -283,6 +303,30 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
 
     // Update the running vector instructions
     for (int pe = 0; pe < NrPEs; pe++) pe_vinsn_running_d[pe] &= ~pe_resp_i[pe].vinsn_done;
+    
+    ////// Handling synchronization
+    pe_resp_d = pe_resp_q;
+    pe_compl_o = '0;
+    sync_d = sync_q;
+
+    /*if (pe_resp_i)
+      pe_resp_d = pe_resp_i;
+
+    for (int vfu = 0; vfu < NrVFUs; vfu++) begin
+      if (insn_queue_done[vfu]) begin
+        pe_compl_o[vfu] = 1'b1;
+      end
+
+      if (pe_compl_i[vfu]) begin
+        sync_d[vfu] = 1'b1;
+      end
+    end
+
+    if (pe_compl_i) begin
+      for (int pe = 0; pe < NrPEs; pe++) pe_vinsn_running_d[pe] &= ~pe_resp_d[pe].vinsn_done;
+    end*/
+
+    ///////
 
     case (state_q)
       IDLE: begin
@@ -299,7 +343,8 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
         end else if (ara_req_valid_i) begin
           // The target PE is ready, and we can handle another running vector instruction
           // Let instructions with priority pass be issued
-          if (&vinsn_queue_issue && !stall_lanes_desynch && !vinsn_running_full) begin
+          // if (&vinsn_queue_issue && !stall_lanes_desynch && !vinsn_running_full) begin
+          if (vinsn_queue_issue[vfu(ara_req_i.op)] && !stall_lanes_desynch && !vinsn_running_full) begin
             ///////////////
             //  Hazards  //
             ///////////////
@@ -408,6 +453,8 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
 
               // Issue the instruction
               pe_req_valid_d = 1'b1;
+              // sync_d[vfu(ara_req_i.op)] = 1'b0;
+
 
               // Mark that this vector instruction is writing to vector vd
               if (ara_req_i.use_vd) write_list_d[ara_req_i.vd] = '{vid: vinsn_id_n, valid: 1'b1};
@@ -583,7 +630,7 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     // The instruction queue [i] allows us to issue the instruction
     // If the insn is not targeting the PE [i], PE [i] cannot stall the instruction issue.
     // Each targeted PE must be ready (either with cnt < MAX or with a priority pass)
-    assign vinsn_queue_issue[i] = ~target_vfus_vec[i] | (vinsn_queue_ready[i] | priority_pass[i]);
+    assign vinsn_queue_issue[i] = ~target_vfus_vec[i] | (vinsn_queue_ready[i] | priority_pass[i]) & sync_q[i];
   end
 
 endmodule : ara_sequencer

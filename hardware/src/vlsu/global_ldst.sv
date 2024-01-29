@@ -163,7 +163,9 @@ always_comb begin : p_global_ldst
   // b channel
   axi_req_o.b_ready = axi_req_i[0].b_ready;                                            
   // r channel
-  axi_req_o.r_ready = axi_req_i[0].r_ready;
+  axi_req_o.r_ready = 1'b1;
+  for (int i=0; i<NrClusters; i++)
+    axi_req_o.r_ready &= axi_req_i[i].r_ready;
 
   // Distribute response to Lane Groups
   for (int i=0; i<NrClusters; i++) begin
