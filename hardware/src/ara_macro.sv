@@ -73,11 +73,7 @@ module ara_macro import ara_pkg::*; #(
 
     output remote_data_t ring_data_l_o,
     output logic         ring_data_l_valid_o,
-    input logic          ring_data_l_ready_i,
-
-    // Interface for synchronization
-    input logic [NrVFUs-1:0]                 pe_compl_i, 
-    output logic [NrVFUs-1:0]                pe_compl_o
+    input logic          ring_data_l_ready_i
 
   );
 
@@ -129,11 +125,7 @@ module ara_macro import ara_pkg::*; #(
 
     .sldu_dir_o          (sldu_dir           ),
     .sldu_bypass_o       (sldu_bypass        ),
-    .sldu_config_valid_o (sldu_conf_valid    ),
-    
-    // Interface for synchronization
-    .pe_compl_i          (pe_compl_i         ),
-    .pe_compl_o          (pe_compl_o         )
+    .sldu_config_valid_o (sldu_conf_valid    )
 
   );
 

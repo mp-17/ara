@@ -63,11 +63,7 @@ module ara import ara_pkg::*; #(
 
     output logic sldu_dir_o,
     output logic sldu_bypass_o,
-    output logic sldu_config_valid_o,
-
-    // Interface for synchronization
-    input logic [NrVFUs-1:0]                 pe_compl_i, 
-    output logic [NrVFUs-1:0]                pe_compl_o
+    output logic sldu_config_valid_o
 
   );
 
@@ -182,9 +178,6 @@ module ara import ara_pkg::*; #(
     .ara_resp_o            (ara_resp                 ),
     .ara_resp_valid_o      (ara_resp_valid           ),
     .ara_idle_o            (ara_idle                 ),
-    // To synchronizer
-    .pe_compl_i            (pe_compl_i               ),
-    .pe_compl_o            (pe_compl_o               ),
     // Interface with the PEs
     .pe_req_o              (pe_req                   ),
     .pe_req_valid_o        (pe_req_valid             ),
