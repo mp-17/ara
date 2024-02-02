@@ -21,9 +21,11 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
     input  logic                           rst_ni,
     // Memory interface
     output axi_ar_t                        axi_ar_o,
+    output vew_e                           vew_ar_o, 
     output logic                           axi_ar_valid_o,
     input  logic                           axi_ar_ready_i,
     output axi_aw_t                        axi_aw_o,
+    output vew_e                           vew_aw_o,
     output logic                           axi_aw_valid_o,
     input  logic                           axi_aw_ready_i,
     // Interace with the dispatcher
@@ -596,6 +598,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
                   burst  : BURST_INCR,
                   default: '0
                 };
+                vew_ar_o = axi_addrgen_q.vew; 
                 axi_ar_valid_o = 1'b1;
               end
               // AW Channel
@@ -610,6 +613,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
                   burst  : BURST_INCR,
                   default: '0
                 };
+                vew_aw_o = axi_addrgen_q.vew; 
                 axi_aw_valid_o = 1'b1;
               end
 

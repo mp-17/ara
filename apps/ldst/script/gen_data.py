@@ -40,9 +40,9 @@ else:
   # Default: no stripmine
   vsize = 64
 
-avl64 = int(vsize)
+avl64 = int(vsize)+10
 avl32 = int(vsize)+10 # To test unaligned 
-avl16 = int(vsize)
+avl16 = int(vsize)+10
 
 # Create the vectors
 v64a = np.random.rand(avl64).astype(np.float64)
@@ -66,14 +66,20 @@ res16 = 0
 # Print information on file
 print(".section .data,\"aw\",@progbits")
 emit("vsize", np.array(vsize, dtype=np.uint64))
-emit("v64a", v64a, 'NR_LANES*NR_CLUSTERS*4')
-emit("v64b", v64b, 'NR_LANES*NR_CLUSTERS*4')
-emit("v32a", v32a, 'NR_LANES*NR_CLUSTERS*4')
-emit("v32b", v32b, 'NR_LANES*NR_CLUSTERS*4')
-emit("v16a", v16a, 'NR_LANES*NR_CLUSTERS*4')
-emit("v16b", v16b, 'NR_LANES*NR_CLUSTERS*4')
+
+# emit("va", v64a, 'NR_LANES*NR_CLUSTERS*4')
+# emit("vb", v64b, 'NR_LANES*NR_CLUSTERS*4')
+# emit("va", v32a, 'NR_LANES*NR_CLUSTERS*4')
+# emit("vb", v32b, 'NR_LANES*NR_CLUSTERS*4')
+emit("va", v16a, 'NR_LANES*NR_CLUSTERS*4')
+emit("vb", v16b, 'NR_LANES*NR_CLUSTERS*4')
+
+red64 = sum(v64a[0:vsize])
 red32 = sum(v32a[0:vsize])
+red16 = sum(v16a[0:vsize])
+emit("red64", np.array(red64, dtype=np.float64))
 emit("red32", np.array(red32, dtype=np.float32))
+emit("red16", np.array(red16, dtype=np.float32))
 
 # emit("gold64", np.array(gold64, dtype=np.float64));
 # emit("gold32", np.array(gold32, dtype=np.float32));

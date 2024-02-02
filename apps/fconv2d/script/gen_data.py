@@ -96,10 +96,11 @@ assert(N % 4 == 0), "Output image dimension must be divisible by 4, pad the inpu
 # Generate a random float64 input padded image
 image = np.random.rand(M_pad, N_pad).astype(dtype)
 # image = np.ones((M_pad, N_pad)).astype(dtype)
+# image[12:,:] = 0
 
 # Generate a random float64 filter
-# gen_filter = np.random.rand(f, f).astype(dtype)
-gen_filter = np.ones((f,f)).astype(dtype)
+gen_filter = np.random.rand(f, f).astype(dtype)
+# gen_filter = np.ones((f,f)).astype(dtype)
 
 # Create the empty o matrix
 empty_o = np.zeros((M, N)).astype(dtype)

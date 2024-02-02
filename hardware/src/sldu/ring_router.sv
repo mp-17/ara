@@ -54,7 +54,11 @@ module ring_router import ara_pkg::*; #(
 	logic ring_right_ready_out, ring_left_ready_out;
 	logic ring_right_valid_inp, ring_left_valid_inp;
 
-	logic dir_d, dir_q; 
+	remote_data_t ring_right_out, ring_left_out; 
+	logic ring_right_ready_inp, ring_left_ready_inp;
+	logic ring_right_valid_out, ring_left_valid_out;
+
+	logic dir_d, dir_q;
 	logic bypass_d, bypass_q;
 
 	always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -72,9 +76,11 @@ module ring_router import ara_pkg::*; #(
 	) i_ring_right_spill_register (
 		.clk_i  (clk_i                        ),
 		.rst_ni (rst_ni                       ),
+		
 		.valid_i(ring_right_valid_i           ),
 		.ready_o(ring_right_ready_o           ),
 		.data_i (ring_right_i                 ),
+
 		.valid_o(ring_right_valid_inp         ),
 		.ready_i(ring_right_ready_out         ),
 		.data_o (ring_right_inp               )
@@ -85,17 +91,49 @@ module ring_router import ara_pkg::*; #(
 	) i_ring_left_spill_register (
 		.clk_i  (clk_i                        ),
 		.rst_ni (rst_ni                       ),
+		
 		.valid_i(ring_left_valid_i           ),
 		.ready_o(ring_left_ready_o           ),
 		.data_i (ring_left_i                 ),
+		
 		.valid_o(ring_left_valid_inp         ),
 		.ready_i(ring_left_ready_out         ),
 		.data_o (ring_left_inp               )
 	);
 
+	spill_register #(
+		.T(elen_t)
+	) i_ring_right_spill_register_o (
+		.clk_i  (clk_i                        ),
+		.rst_ni (rst_ni                       ),
+		
+		.valid_i(ring_right_valid_out           ),
+		.ready_o(ring_right_ready_inp           ),
+		.data_i (ring_right_out                 ),
+		
+		.valid_o(ring_right_valid_o         ),
+		.ready_i(ring_right_ready_i         ),
+		.data_o (ring_right_o               )
+	);
+
+	spill_register #(
+		.T(elen_t)
+	) i_ring_left_spill_register_o (
+		.clk_i  (clk_i                        ),
+		.rst_ni (rst_ni                       ),
+		
+		.valid_i(ring_left_valid_out          ),
+		.ready_o(ring_left_ready_inp          ),
+		.data_i (ring_left_out                ),
+		
+		.valid_o(ring_left_valid_o            ),
+		.ready_i(ring_left_ready_i            ),
+		.data_o (ring_left_o                  )
+	);
+
 	always_comb begin
-		ring_left_valid_o  = 1'b0; 
-		ring_right_valid_o = 1'b0; 
+		ring_left_valid_out  = 1'b0; 
+		ring_right_valid_out = 1'b0;
 		sldu_valid_o       = 1'b0;
 
 		ring_left_ready_out  = 1'b0; 
@@ -107,17 +145,17 @@ module ring_router import ara_pkg::*; #(
 
 		if (~bypass_d) begin
 			if (dir_d==0) begin
-				ring_left_o        = sldu_i;
-				ring_left_valid_o  = sldu_valid_i;
-				sldu_ready_o       = ring_left_ready_i;
+				ring_left_out        = sldu_i;
+				ring_left_valid_out  = sldu_valid_i;
+				sldu_ready_o       = ring_left_ready_inp;
 				  
 				sldu_o             = ring_right_inp;
 				sldu_valid_o       = ring_right_valid_inp;
 				ring_right_ready_out = sldu_ready_i;
 			end else begin
-				ring_right_o        = sldu_i;
-				ring_right_valid_o  = sldu_valid_i;
-				sldu_ready_o       = ring_right_ready_i;
+				ring_right_out        = sldu_i;
+				ring_right_valid_out  = sldu_valid_i;
+				sldu_ready_o       = ring_right_ready_inp;
 
 				sldu_o             = ring_left_inp;
 				sldu_valid_o       = ring_left_valid_inp;
@@ -125,13 +163,13 @@ module ring_router import ara_pkg::*; #(
 			end
 		end else begin
 			if (dir_d==0) begin
-				ring_left_o        = ring_right_inp;
-				ring_left_valid_o  = ring_right_valid_inp;
-				ring_right_ready_out = ring_left_ready_i;
+				ring_left_out        = ring_right_inp;
+				ring_left_valid_out  = ring_right_valid_inp;
+				ring_right_ready_out = ring_left_ready_inp;
 			end else begin
-				ring_right_o        = ring_left_inp;
-				ring_right_valid_o  = ring_left_valid_inp;
-				ring_left_ready_out   = ring_right_ready_i;
+				ring_right_out        = ring_left_inp;
+				ring_right_valid_out  = ring_left_valid_inp;
+				ring_left_ready_out   = ring_right_ready_inp;
 			end
 		end
 	end

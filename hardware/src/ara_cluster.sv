@@ -6,7 +6,7 @@
 // Description:
 // Ara's System, containing Ara instances and Global Units connecting them.
 
-module ara_cluster import ara_pkg::*; #(
+module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
     // RVV Parameters
     parameter  int           unsigned NrLanes      = 0,   // Number of parallel vector lanes per Ara instance
     parameter  int           unsigned NrClusters   = 0,   // Number of Ara instances
@@ -60,6 +60,7 @@ module ara_cluster import ara_pkg::*; #(
     // AXI interface
     output axi_req_t          axi_req_o,
     input  axi_resp_t         axi_resp_i
+
   );
   accelerator_req_t [NrClusters-1:0] acc_req;
   logic req_ready, resp_valid;
@@ -67,11 +68,13 @@ module ara_cluster import ara_pkg::*; #(
   accelerator_resp_t [NrClusters-1:0] acc_resp;
   accelerator_resp_t acc_resp_d, acc_resp_q;
 
-  cluster_axi_req_t      [NrClusters-1:0] ara_axi_req, ara_axi_req_cut;
-  cluster_axi_resp_t     [NrClusters-1:0] ara_axi_resp, ara_axi_resp_cut;
+  cluster_axi_req_t      [NrClusters-1:0] ara_axi_req, ara_axi_req_cut, ldst_axi_req;
+  cluster_axi_resp_t     [NrClusters-1:0] ara_axi_resp, ara_axi_resp_cut, ldst_axi_resp;
 
   axi_req_t  axi_req_cut, axi_req_align;
   axi_resp_t axi_resp_cut, axi_resp_align;
+
+  vew_e [NrClusters-1:0] vew_ar, vew_aw;
 
   // Ring connections
   remote_data_t [NrClusters-1:0] ring_data_l, ring_data_r; 
@@ -113,6 +116,9 @@ module ara_cluster import ara_pkg::*; #(
         .axi_req_o         (ara_axi_req_cut[cluster]   ),
         .axi_resp_i        (ara_axi_resp_cut[cluster]  ),
 
+        .vew_ar_o        (vew_ar[cluster]         ),
+        .vew_aw_o        (vew_aw[cluster]         ),
+
         // Ring
         .ring_data_r_i       (ring_data_l        [cluster == NrClusters-1 ? 0 : cluster + 1]     ),
         .ring_data_r_valid_i (ring_data_l_valid  [cluster == NrClusters-1 ? 0 : cluster + 1]     ),
@@ -132,6 +138,32 @@ module ara_cluster import ara_pkg::*; #(
       );
   end
 
+  
+  // Shuffle stage
+  shuffle_stage #(
+    .NrLanes            (NrLanes),
+    .NrClusters         (NrClusters),
+      .ClusterAxiDataWidth(ClusterAxiDataWidth),
+      .AxiAddrWidth(AxiAddrWidth),
+      // .axi_ar_t   (axi_ar_t     ),
+      // .axi_aw_t   (axi_aw_t     ),
+      // .axi_b_t    (axi_b_t      ),
+      .axi_r_t    (cluster_axi_r_t      ),
+      .axi_w_t    (cluster_axi_w_t      ),
+      .axi_req_t  (cluster_axi_req_t    ), 
+      .axi_resp_t (cluster_axi_resp_t   )
+    ) i_shuffle_stage (
+      .clk_i     (clk_i                  ), 
+      .rst_ni    (rst_ni                 ), 
+      .axi_req_i (ara_axi_req_cut        ),
+      .axi_resp_o(ara_axi_resp_cut       ),
+      .axi_req_o (ldst_axi_req     ),
+      .axi_resp_i(ldst_axi_resp    ),
+      .vew_ar_i  (vew_ar[0]           ),
+      .vew_aw_i  (vew_aw[0]           ) 
+  );
+  
+
   // Global Ld/St Unit
   global_ldst #(
     .NrLanes            (NrLanes            ),
@@ -147,8 +179,12 @@ module ara_cluster import ara_pkg::*; #(
     .clk_i     (clk_i),
     .rst_ni    (rst_ni),
     // To Ara
-    .axi_req_i (ara_axi_req_cut  ),
-    .axi_resp_o(ara_axi_resp_cut ),
+    .axi_req_i (ldst_axi_req  ),
+    .axi_resp_o(ldst_axi_resp ),
+
+    // .axi_req_i (ara_axi_req_cut  ),
+    // .axi_resp_o(ara_axi_resp_cut ),
+
     // To System
     .axi_resp_i(axi_resp_cut),
     .axi_req_o (axi_req_cut)

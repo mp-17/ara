@@ -6,7 +6,7 @@
 // Description:
 // A Repeatable ARA macro, containing ARA and ring router
 
-module ara_macro import ara_pkg::*; #(
+module ara_macro import ara_pkg::*; import rvv_pkg::*; #(
     // RVV Parameters
     parameter  int           unsigned NrLanes      = 0,   // Number of parallel vector lanes per Ara instance
     parameter  int           unsigned NrClusters   = 0,   // Number of Ara instances
@@ -73,9 +73,14 @@ module ara_macro import ara_pkg::*; #(
 
     output remote_data_t ring_data_l_o,
     output logic         ring_data_l_valid_o,
-    input logic          ring_data_l_ready_i
+    input logic          ring_data_l_ready_i,
+
+    output vew_e              vew_ar_o,
+    output vew_e              vew_aw_o
 
   );
+
+  `include "common_cells/registers.svh"
 
   // To System AXI
   cluster_axi_req_t     ara_axi_req;
@@ -85,6 +90,140 @@ module ara_macro import ara_pkg::*; #(
   remote_data_t sldu_i, sldu_o; 
   logic         sldu_valid_i, sldu_valid_o; 
   logic         sldu_ready_i, sldu_ready_o;
+
+  vew_e vew_ar, vew_aw;
+  logic     [cf_math_pkg::idx_width(NrClusters)-1:0] cluster_id;
+
+  accelerator_req_t acc_req, acc_req_o;
+  accelerator_resp_t acc_resp, acc_resp_out;
+
+  //// Request signals
+  logic                                 req_valid;
+  logic                                 resp_ready;
+  logic                                 acc_cons_en;
+  logic                                 store_pending_req;
+  logic                                 inval_ready;
+  //// Response signals
+  logic                                 req_ready;
+  logic                                 resp_valid;
+  // Metadata
+  logic                                 store_pending;
+  logic                                 store_complete;
+  logic                                 load_complete;
+  logic [4:0]                           fflags;
+  logic                                 fflags_valid;
+  // Invalidation interface
+  logic                                 inval_valid;
+  logic [63:0]                          inval_addr;
+
+  /////////////////////////
+  // Cuts for the macro ///
+  /////////////////////////
+
+  `FF(vew_ar_o, vew_ar, vew_e'(1'b0), clk_i, rst_ni);
+  `FF(vew_aw_o, vew_aw, vew_e'(1'b0), clk_i, rst_ni);
+  `FF(cluster_id, cluster_id_i, '0, clk_i, rst_ni);
+  
+  // Cut Request interface
+  spill_register #(
+    .T(accelerator_req_t)
+  ) i_cva6_req_cut (
+    .clk_i  (clk_i                         ),
+    .rst_ni (rst_ni                        ),
+    
+    .valid_i(acc_req_i.req_valid           ),
+    .ready_o(req_ready                     ),
+    .data_i (acc_req_i                     ),
+
+    .valid_o(req_valid                     ),
+    .ready_i(acc_resp.req_ready            ),
+    .data_o (acc_req                       )
+  );
+
+  // Cut Response interface
+  spill_register #(
+    .T(accelerator_resp_t)
+  ) i_cva6_resp_cut (
+    .clk_i  (clk_i                        ),
+    .rst_ni (rst_ni                       ),
+    
+    .valid_i(acc_resp.resp_valid         ),
+    .ready_o(resp_ready                   ),
+    .data_i (acc_resp                     ),
+
+    .valid_o(resp_valid                   ),
+    .ready_i(acc_req_i.resp_ready         ),
+    .data_o (acc_resp_out                 )
+  );
+
+  // Invalidation interface
+  spill_register #(
+    .T(logic [63:0])
+  ) i_cva6_invalid_cut (
+    .clk_i  (clk_i                        ),
+    .rst_ni (rst_ni                       ),
+    
+    .valid_i(acc_resp.inval_valid       ),
+    .ready_o(inval_ready                  ),
+    .data_i (acc_resp.inval_addr          ),
+
+    .valid_o(inval_valid                ),
+    .ready_i(acc_req_i.inval_ready        ),
+    .data_o (inval_addr                 )
+  );
+
+   //`FF(trans_id, acc_resp.trans_id, '0, clk_i, rst_ni);
+  `FF(load_complete, acc_resp.load_complete, '0, clk_i, rst_ni);
+  `FF(store_complete, acc_resp.store_complete, '0, clk_i, rst_ni);
+  `FF(store_pending, acc_resp.store_pending, '0, clk_i, rst_ni);
+  `FF(fflags_valid, acc_resp.fflags_valid, '0, clk_i, rst_ni);
+  `FF(fflags, acc_resp.fflags, '0, clk_i, rst_ni);
+  `FF(acc_cons_en, acc_req_i.acc_cons_en, '0, clk_i, rst_ni);
+  `FF(store_pending_req, acc_req_i.store_pending, '0, clk_i, rst_ni);
+
+  always_comb begin
+    //// Resp to CVA6
+    acc_resp_o = acc_resp_out;
+    acc_resp_o.req_ready = req_ready;
+    acc_resp_o.resp_valid = resp_valid;
+    
+    // MetaData
+    acc_resp_o.load_complete = load_complete;
+    acc_resp_o.store_complete = store_complete;
+    acc_resp_o.store_pending = store_pending;
+    acc_resp_o.fflags_valid = fflags_valid;
+    acc_resp_o.fflags = fflags;
+
+    // Invalidation Interface
+    acc_resp_o.inval_valid = inval_valid;
+    acc_resp_o.inval_addr = inval_addr;
+
+    //// Request from CVA6
+    acc_req_o = acc_req;
+    acc_req_o.req_valid = req_valid;
+    acc_req_o.resp_ready = resp_ready;
+    acc_req_o.inval_ready = inval_ready;
+    acc_req_o.store_pending = store_pending_req;
+    acc_req_o.acc_cons_en = acc_cons_en;
+
+  end
+
+  axi_cut #(
+    .ar_chan_t   (cluster_axi_ar_t     ),
+    .aw_chan_t   (cluster_axi_aw_t     ),
+    .b_chan_t    (cluster_axi_b_t      ),
+    .r_chan_t    (cluster_axi_r_t      ),
+    .w_chan_t    (cluster_axi_w_t      ),
+    .axi_req_t   (cluster_axi_req_t    ),
+    .axi_resp_t  (cluster_axi_resp_t   )
+  ) i_global_ldst_ara_axi_cut (
+    .clk_i       (clk_i),
+    .rst_ni      (rst_ni),
+    .slv_req_i   (ara_axi_req),
+    .slv_resp_o  (ara_axi_resp),
+    .mst_req_o   (axi_req_o),
+    .mst_resp_i  (axi_resp_i)
+  );
 
   ara #(
     .NrLanes     (NrLanes             ),
@@ -108,11 +247,14 @@ module ara_macro import ara_pkg::*; #(
     .scan_data_i     (1'b0             ),
     .scan_data_o     (/* Unused */     ),
     
-    .cluster_id_i    (cluster_id_i     ),
-    .acc_req_i       (acc_req_i        ),
-    .acc_resp_o      (acc_resp_o       ),
+    .cluster_id_i    (cluster_id       ),
+    .acc_req_i       (acc_req_o        ),
+    .acc_resp_o      (acc_resp       ),
     .axi_req_o       (ara_axi_req      ),
     .axi_resp_i      (ara_axi_resp     ),
+
+    .vew_ar_o        (vew_ar           ),
+    .vew_aw_o        (vew_aw           ),
     
     // To Ring Routers
     .ring_data_o         (sldu_o             ), 
@@ -163,24 +305,6 @@ module ara_macro import ara_pkg::*; #(
     .ring_left_o        (ring_data_l_o      ),
     .ring_left_valid_o  (ring_data_l_valid_o),
     .ring_left_ready_i  (ring_data_l_ready_i)
-  );
-
-  // Axi Cuts to ARA
-  axi_cut #(
-    .ar_chan_t   (cluster_axi_ar_t     ),
-    .aw_chan_t   (cluster_axi_aw_t     ),
-    .b_chan_t    (cluster_axi_b_t      ),
-    .r_chan_t    (cluster_axi_r_t      ),
-    .w_chan_t    (cluster_axi_w_t      ),
-    .axi_req_t   (cluster_axi_req_t    ),
-    .axi_resp_t  (cluster_axi_resp_t   )
-  ) i_global_ldst_ara_axi_cut (
-    .clk_i       (clk_i),
-    .rst_ni      (rst_ni),
-    .slv_req_i   (ara_axi_req),
-    .slv_resp_o  (ara_axi_resp),
-    .mst_req_o   (axi_req_o),
-    .mst_resp_i  (axi_resp_i)
   );
 
 endmodule

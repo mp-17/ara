@@ -45,11 +45,13 @@ typedef struct packed {
 } req_track_t;
 
 localparam int unsigned NumTrackers=8;
+typedef logic [$clog2(NumTrackers)-1:0] pnt_t; 
+typedef logic [$clog2(NumTrackers):0] cnt_t; 
 
 req_track_t [NumTrackers-1:0] tracker_d, tracker_q;
-logic [$clog2(NumTrackers)-1:0] w_pnt_tracker_d, w_pnt_tracker_q;
-logic [NumStages-1:0] [$clog2(NumTrackers)-1:0] r_pnt_tracker_d, r_pnt_tracker_q;
-logic [$clog2(NumTrackers):0] cnt_tracker_d, cnt_tracker_q;
+pnt_t w_pnt_tracker_d, w_pnt_tracker_q;
+pnt_t [NumStages-1:0] r_pnt_tracker_d, r_pnt_tracker_q;
+cnt_t cnt_tracker_d, cnt_tracker_q;
 
 // axi_req_t  [NumStages+1:0] axi_req_cut;
 logic [NumStages+1:0] axi_req_cut_ready;
@@ -95,24 +97,7 @@ always_ff @(posedge clk_i or negedge rst_ni) begin
 end
 
 for (genvar s=0; s <= NumStages; s++) begin 
-  /*
-  axi_cut #(
-    .ar_chan_t   (axi_ar_t     ),
-    .aw_chan_t   (axi_aw_t     ),
-    .b_chan_t    (axi_b_t      ),
-    .r_chan_t    (axi_r_t      ),
-    .w_chan_t    (axi_w_t      ),
-    .axi_req_t   (axi_req_t    ),
-    .axi_resp_t  (axi_resp_t   )  
-  ) i_align_axi_cut (
-    .clk_i       (clk_i),
-    .rst_ni      (rst_ni),
-    .slv_req_i   (axi_req_cut [s]),
-    .slv_resp_o  (axi_resp_o_cut[s]),
-    .mst_req_o   (axi_req_cut [s+1]),
-    .mst_resp_i  (axi_resp_i_cut[s])
-  );
-  */
+
 
   stream_register #(
     .T       ( axi_r_t )
@@ -181,7 +166,7 @@ always_comb begin
  
   // If a request arrives, add to tracker.
   // Assign shift enable for different stages
-  if (axi_req_i.ar_valid && !tracker_full) begin
+  if (axi_req_i.ar_valid && axi_resp_o.ar_ready) begin
     tracker_d[w_pnt_tracker_q].addr = axi_req_i.ar.addr;
     for (int i=0; i<NumStages; i++) begin 
       if (axi_req_i.ar.addr & (1<<i)) begin 

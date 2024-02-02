@@ -29,6 +29,8 @@ module vlsu import ara_pkg::*; import rvv_pkg::*; #(
     input  logic                    rst_ni,
     // AXI Memory Interface
     output axi_req_t                axi_req_o,
+    output vew_e                    vew_ar_o,
+    output vew_e                    vew_aw_o,
     input  axi_resp_t               axi_resp_i,
     // Interface with the dispatcher
     input  logic                    core_st_pending_i,
@@ -100,6 +102,12 @@ module vlsu import ara_pkg::*; import rvv_pkg::*; #(
     .slv_resp_o(axi_resp  )
   );
 
+  `include "common_cells/registers.svh" 
+
+  vew_e vew_ar, vew_aw;
+  `FF(vew_ar_o, vew_ar, vew_e'(1'b0), clk_i, rst_ni);
+  `FF(vew_aw_o, vew_aw, vew_e'(1'b0), clk_i, rst_ni);
+
   //////////////////////////
   //  Address Generation  //
   //////////////////////////
@@ -121,9 +129,11 @@ module vlsu import ara_pkg::*; import rvv_pkg::*; #(
     .rst_ni                     (rst_ni                     ),
     // AXI Memory Interface
     .axi_aw_o                   (axi_req.aw                 ),
+    .vew_aw_o                   (vew_aw                     ),
     .axi_aw_valid_o             (axi_req.aw_valid           ),
     .axi_aw_ready_i             (axi_resp.aw_ready          ),
     .axi_ar_o                   (axi_req.ar                 ),
+    .vew_ar_o                   (vew_ar                     ), 
     .axi_ar_valid_o             (axi_req.ar_valid           ),
     .axi_ar_ready_i             (axi_resp.ar_ready          ),
     // Interface with dispatcher

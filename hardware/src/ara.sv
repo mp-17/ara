@@ -6,7 +6,7 @@
 // Description:
 // Ara's top-level, interfacing with Ariane.
 
-module ara import ara_pkg::*; #(
+module ara import ara_pkg::*; import rvv_pkg::*; #(
     // RVV Parameters
     parameter  int           unsigned NrLanes      = 0,                          // Number of parallel vector lanes.
     parameter  int           unsigned NrClusters   = 0,
@@ -51,6 +51,8 @@ module ara import ara_pkg::*; #(
     // AXI interface
     output axi_req_t          axi_req_o,
     input  axi_resp_t         axi_resp_i,
+    output vew_e              vew_ar_o,
+    output vew_e              vew_aw_o,
 
     // Interface with Ring Interconnect
     output remote_data_t ring_data_o,
@@ -350,6 +352,8 @@ module ara import ara_pkg::*; #(
     // AXI memory interface
     .axi_req_o                  (axi_req_o                                             ),
     .axi_resp_i                 (axi_resp_i                                            ),
+    .vew_ar_o                   (vew_ar_o                                              ),
+    .vew_aw_o                   (vew_aw_o                                              ),
     // Interface with the dispatcher
     .core_st_pending_i          (core_st_pending                                       ),
     .load_complete_o            (load_complete                                         ),
