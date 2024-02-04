@@ -9,7 +9,6 @@
 module ara_macro import ara_pkg::*; import rvv_pkg::*; #(
     // RVV Parameters
     parameter  int           unsigned NrLanes      = 0,   // Number of parallel vector lanes per Ara instance
-    parameter  int           unsigned NrClusters   = 0,   // Number of Ara instances
 
     // Support for floating-point data types
     parameter  fpu_support_e          FPUSupport   = FPUSupportHalfSingleDouble,
@@ -48,7 +47,8 @@ module ara_macro import ara_pkg::*; import rvv_pkg::*; #(
     output logic              scan_data_o,
 
     // Id
-    input  logic     [cf_math_pkg::idx_width(NrClusters)-1:0] cluster_id_i,
+    input  id_cluster_t       cluster_id_i,
+    input  num_cluster_t      num_clusters_i,
 
     // Interface with Ariane
     input  accelerator_req_t  acc_req_i,
@@ -92,7 +92,8 @@ module ara_macro import ara_pkg::*; import rvv_pkg::*; #(
   logic         sldu_ready_i, sldu_ready_o;
 
   vew_e vew_ar, vew_aw;
-  logic     [cf_math_pkg::idx_width(NrClusters)-1:0] cluster_id;
+  id_cluster_t cluster_id;
+  num_cluster_t num_clusters;
 
   accelerator_req_t acc_req, acc_req_o;
   accelerator_resp_t acc_resp, acc_resp_out;
@@ -123,6 +124,7 @@ module ara_macro import ara_pkg::*; import rvv_pkg::*; #(
   `FF(vew_ar_o, vew_ar, vew_e'(1'b0), clk_i, rst_ni);
   `FF(vew_aw_o, vew_aw, vew_e'(1'b0), clk_i, rst_ni);
   `FF(cluster_id, cluster_id_i, '0, clk_i, rst_ni);
+  `FF(num_clusters, num_clusters_i, '0, clk_i, rst_ni);
   
   // Cut Request interface
   spill_register #(
@@ -227,7 +229,6 @@ module ara_macro import ara_pkg::*; import rvv_pkg::*; #(
 
   ara #(
     .NrLanes     (NrLanes             ),
-    .NrClusters  (NrClusters          ),
     .FPUSupport  (FPUSupport          ),
     .FPExtSupport(FPExtSupport        ),
     .FixPtSupport(FixPtSupport        ),
@@ -248,8 +249,9 @@ module ara_macro import ara_pkg::*; import rvv_pkg::*; #(
     .scan_data_o     (/* Unused */     ),
     
     .cluster_id_i    (cluster_id       ),
+    .num_clusters_i  (num_clusters     ),
     .acc_req_i       (acc_req_o        ),
-    .acc_resp_o      (acc_resp       ),
+    .acc_resp_o      (acc_resp         ),
     .axi_req_o       (ara_axi_req      ),
     .axi_resp_i      (ara_axi_resp     ),
 

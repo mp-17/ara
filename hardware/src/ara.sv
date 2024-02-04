@@ -8,8 +8,7 @@
 
 module ara import ara_pkg::*; import rvv_pkg::*; #(
     // RVV Parameters
-    parameter  int           unsigned NrLanes      = 0,                          // Number of parallel vector lanes.
-    parameter  int           unsigned NrClusters   = 0,
+    parameter  int           unsigned NrLanes      = 0,  // Number of parallel vector lanes.
     // Support for floating-point data types
     parameter  fpu_support_e          FPUSupport   = FPUSupportHalfSingleDouble,
     // External support for vfrec7, vfrsqrt7
@@ -44,7 +43,8 @@ module ara import ara_pkg::*; import rvv_pkg::*; #(
     input  logic              scan_data_i,
     output logic              scan_data_o,
     // Id
-    input  logic     [cf_math_pkg::idx_width(NrClusters)-1:0] cluster_id_i,
+    input  id_cluster_t       cluster_id_i,
+    input num_cluster_t       num_clusters_i,
     // Interface with Ariane
     input  accelerator_req_t  acc_req_i,
     output accelerator_resp_t acc_resp_o,
@@ -109,11 +109,12 @@ module ara import ara_pkg::*; import rvv_pkg::*; #(
   vxrm_t     [NrLanes-1:0]      alu_vxrm;
 
   ara_dispatcher #(
-    .NrLanes     (NrLanes    ),
-    .NrClusters    (NrClusters   )
+    .NrLanes     (NrLanes    )
   ) i_dispatcher (
     .clk_i             (clk_i           ),
     .rst_ni            (rst_ni          ),
+    // Id
+    .num_clusters_i    (num_clusters_i  ),
     // Interface with Ariane
     .acc_req_i         (acc_req_i       ),
     .acc_resp_o        (acc_resp_o      ),
@@ -254,7 +255,6 @@ module ara import ara_pkg::*; import rvv_pkg::*; #(
   for (genvar lane = 0; lane < NrLanes; lane++) begin: gen_lanes
     lane #(
       .NrLanes     (NrLanes     ),
-      .NrClusters  (NrClusters  ),
       .FPUSupport  (FPUSupport  ),
       .FPExtSupport(FPExtSupport),
       .FixPtSupport(FixPtSupport)
@@ -264,8 +264,10 @@ module ara import ara_pkg::*; import rvv_pkg::*; #(
       .scan_enable_i                   (scan_enable_i                       ),
       .scan_data_i                     (1'b0                                ),
       .scan_data_o                     (/* Unused */                        ),
+      // Id
       .lane_id_i                       (lane[idx_width(NrLanes)-1:0]        ),
       .cluster_id_i                    (cluster_id_i                        ),
+      .num_clusters_i                  (num_clusters_i                      ),
       // Interface with the dispatcher
       .vxsat_flag_o                    (vxsat_flag[lane]                    ),
       .alu_vxrm_i                      (alu_vxrm[lane]                      ),
@@ -402,13 +404,13 @@ module ara import ara_pkg::*; import rvv_pkg::*; #(
 
   sldu #(
     .NrLanes(NrLanes),
-    .NrClusters(NrClusters),
     .vaddr_t(vaddr_t)
   ) i_sldu (
     .clk_i                   (clk_i                            ),
     .rst_ni                  (rst_ni                           ),
     // Id
     .cluster_id_i            (cluster_id_i                     ),
+    .num_clusters_i          (num_clusters_i                   ),
     // Interface with the main sequencer
     .pe_req_i                (pe_req                           ),
     .pe_req_valid_i          (pe_req_valid                     ),

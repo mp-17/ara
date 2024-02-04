@@ -62,6 +62,12 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
     input  axi_resp_t         axi_resp_i
 
   );
+
+  // Number of Clusters configuration
+  num_cluster_t numClusters;
+  assign numClusters = $clog2(NrClusters);
+  
+  // Intermediate signals
   accelerator_req_t [NrClusters-1:0] acc_req;
   logic req_ready, resp_valid;
 
@@ -82,8 +88,7 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
 
   for (genvar cluster=0; cluster < NrClusters; cluster++) begin : p_cluster 
       ara_macro #(
-        .NrLanes           (NrLanes             ), 
-        .NrClusters        (NrClusters          ),
+        .NrLanes           (NrLanes             ),
         .FPUSupport        (FPUSupport          ),
         .FPExtSupport      (FPExtSupport        ),
         .FixPtSupport      (FixPtSupport        ),
@@ -106,7 +111,8 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
         .scan_data_o       (/* Unused */        ),
 
         // Id
-        .cluster_id_i      (cluster[cf_math_pkg::idx_width(NrClusters)-1:0]            ),
+        .cluster_id_i      (id_cluster_t'(cluster) ),
+        .num_clusters_i    (numClusters            ),
 
         // Interface with Ariane
         .acc_req_i         (acc_req [cluster]   ),
@@ -139,29 +145,29 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
   end
 
   
-  // Shuffle stage
-  shuffle_stage #(
-    .NrLanes            (NrLanes),
-    .NrClusters         (NrClusters),
-      .ClusterAxiDataWidth(ClusterAxiDataWidth),
-      .AxiAddrWidth(AxiAddrWidth),
-      // .axi_ar_t   (axi_ar_t     ),
-      // .axi_aw_t   (axi_aw_t     ),
-      // .axi_b_t    (axi_b_t      ),
-      .axi_r_t    (cluster_axi_r_t      ),
-      .axi_w_t    (cluster_axi_w_t      ),
-      .axi_req_t  (cluster_axi_req_t    ), 
-      .axi_resp_t (cluster_axi_resp_t   )
-    ) i_shuffle_stage (
-      .clk_i     (clk_i                  ), 
-      .rst_ni    (rst_ni                 ), 
-      .axi_req_i (ara_axi_req_cut        ),
-      .axi_resp_o(ara_axi_resp_cut       ),
-      .axi_req_o (ldst_axi_req     ),
-      .axi_resp_i(ldst_axi_resp    ),
-      .vew_ar_i  (vew_ar[0]           ),
-      .vew_aw_i  (vew_aw[0]           ) 
-  );
+  // // Shuffle stage
+  // shuffle_stage #(
+  //   .NrLanes            (NrLanes),
+  //   .NrClusters         (NrClusters),
+  //     .ClusterAxiDataWidth(ClusterAxiDataWidth),
+  //     .AxiAddrWidth(AxiAddrWidth),
+  //     // .axi_ar_t   (axi_ar_t     ),
+  //     // .axi_aw_t   (axi_aw_t     ),
+  //     // .axi_b_t    (axi_b_t      ),
+  //     .axi_r_t    (cluster_axi_r_t      ),
+  //     .axi_w_t    (cluster_axi_w_t      ),
+  //     .axi_req_t  (cluster_axi_req_t    ), 
+  //     .axi_resp_t (cluster_axi_resp_t   )
+  //   ) i_shuffle_stage (
+  //     .clk_i     (clk_i                  ), 
+  //     .rst_ni    (rst_ni                 ), 
+  //     .axi_req_i (ara_axi_req_cut        ),
+  //     .axi_resp_o(ara_axi_resp_cut       ),
+  //     .axi_req_o (ldst_axi_req     ),
+  //     .axi_resp_i(ldst_axi_resp    ),
+  //     .vew_ar_i  (vew_ar[0]           ),
+  //     .vew_aw_i  (vew_aw[0]           ) 
+  // );
   
 
   // Global Ld/St Unit
@@ -179,11 +185,11 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
     .clk_i     (clk_i),
     .rst_ni    (rst_ni),
     // To Ara
-    .axi_req_i (ldst_axi_req  ),
-    .axi_resp_o(ldst_axi_resp ),
+    // .axi_req_i (ldst_axi_req  ),
+    // .axi_resp_o(ldst_axi_resp ),
 
-    // .axi_req_i (ara_axi_req_cut  ),
-    // .axi_resp_o(ara_axi_resp_cut ),
+    .axi_req_i (ara_axi_req_cut  ),
+    .axi_resp_o(ara_axi_resp_cut ),
 
     // To System
     .axi_resp_i(axi_resp_cut),
@@ -259,5 +265,8 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
     acc_resp_o = acc_resp[0];
     acc_resp_o.req_ready = acc_req_ready_o;
   end
+
+  if (NrClusters > MaxNrClusters) 
+    $error("Increase MaxNrClusters in ara_pkg size");
 
 endmodule : ara_cluster

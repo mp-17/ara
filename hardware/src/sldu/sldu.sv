@@ -9,18 +9,18 @@
 
 module sldu import ara_pkg::*; import rvv_pkg::*; #(
     parameter  int  unsigned NrLanes   = 0,
-    parameter  int  unsigned NrClusters= 0,
     parameter  type          vaddr_t = logic, // Type used to address vector register file elements
     // Dependant parameters. DO NOT CHANGE!
     localparam int  unsigned DataWidth = $bits(elen_t), // Width of the lane datapath
     localparam int  unsigned StrbWidth = DataWidth/8,
     localparam type          strb_t    = logic [StrbWidth-1:0], // Byte-strobe type
-    localparam type          cluster_reduction_rx_cnt_t = logic [idx_width(NrClusters/2):0]
+    localparam type          cluster_reduction_rx_cnt_t = logic [idx_width($clog2(MaxNrClusters)+1):0]
   ) (
     input  logic                   clk_i,
     input  logic                   rst_ni,
     // Id
-    input  logic     [cf_math_pkg::idx_width(NrClusters)-1:0] cluster_id_i,
+    input  id_cluster_t            cluster_id_i,
+    input num_cluster_t            num_clusters_i,
     // Interface with the main sequencer
     input  pe_req_t                pe_req_i,
     input  logic                   pe_req_valid_i,
@@ -133,7 +133,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   //  Result queues  //
   /////////////////////
 
-  localparam int unsigned ResultQueueDepth = 8;
+  localparam int unsigned ResultQueueDepth = 3;
 
   // There is a result queue per lane, holding the results that were not
   // yet accepted by the corresponding lane.
@@ -430,48 +430,91 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   //// Stream FIFOs to handle ring data
   // Fifo to interact with input from ring
   localparam int RingFifoDepth = 4;
-  stream_fifo #(
-    .FALL_THROUGH(1'b1),
-    .DATA_WIDTH(64),
-    .DEPTH(RingFifoDepth)
-  ) i_ring_fifo_input (
-    .clk_i     (clk_i),
-    .rst_ni    (rst_ni),
+  // stream_fifo #(
+  //   .FALL_THROUGH(1'b1),
+  //   .DATA_WIDTH(64),
+  //   .DEPTH(RingFifoDepth)
+  // ) i_ring_fifo_input (
+  //   .clk_i     (clk_i),
+  //   .rst_ni    (rst_ni),
 
-    .flush_i   (1'b0),
-    .testmode_i (1'b0),
-    .usage_o (/*unused*/),
+  //   .flush_i   (1'b0),
+  //   .testmode_i (1'b0),
+  //   .usage_o (/*unused*/),
 
-    .data_i    (sldu_ring_i),
-    .valid_i   (sldu_ring_valid_i),
-    .ready_o   (sldu_ring_ready_o),
+  //   .data_i    (sldu_ring_i),
+  //   .valid_i   (sldu_ring_valid_i),
+  //   .ready_o   (sldu_ring_ready_o),
 
-    .data_o    (fifo_ring_inp),
-    .valid_o   (fifo_ring_valid_inp),
-    .ready_i   (fifo_ring_ready_out)
-  );
+  //   .data_o    (fifo_ring_inp),
+  //   .valid_o   (fifo_ring_valid_inp),
+  //   .ready_i   (fifo_ring_ready_out)
+  // );
 
-  // Fifo to interact with output to ring
-  stream_fifo #(
-    .FALL_THROUGH(1'b1),
-    .DATA_WIDTH(64),
-    .DEPTH(RingFifoDepth)
-  ) i_ring_fifo_output (
-    .clk_i     (clk_i),
-    .rst_ni    (rst_ni),
+  // // Fifo to interact with output to ring
+  // stream_fifo #(
+  //   .FALL_THROUGH(1'b1),
+  //   .DATA_WIDTH(64),
+  //   .DEPTH(RingFifoDepth)
+  // ) i_ring_fifo_output (
+  //   .clk_i     (clk_i),
+  //   .rst_ni    (rst_ni),
 
-    .flush_i   (1'b0),
-    .testmode_i (1'b0),
-    .usage_o (/*unused*/),
+  //   .flush_i   (1'b0),
+  //   .testmode_i (1'b0),
+  //   .usage_o (/*unused*/),
 
-    .data_i    (fifo_ring_out),
-    .valid_i   (fifo_ring_valid_out),
-    .ready_o   (fifo_ring_ready_inp),
+  //   .data_i    (fifo_ring_out),
+  //   .valid_i   (fifo_ring_valid_out),
+  //   .ready_o   (fifo_ring_ready_inp),
 
-    .data_o    (sldu_ring_o),
-    .valid_o   (sldu_ring_valid_o),
-    .ready_i   (sldu_ring_ready_i)
-  );
+  //   .data_o    (sldu_ring_o),
+  //   .valid_o   (sldu_ring_valid_o),
+  //   .ready_i   (sldu_ring_ready_i)
+  // );
+
+  // stream_register #(
+  //   .T(elen_t)
+  // ) i_stream_inp (
+  //   .clk_i (clk_i),
+  //   .rst_ni (rst_ni), 
+  //   .clr_i     (1'b0), 
+  //   .testmode_i (1'b0),
+
+  //   .data_i    (sldu_ring_i),
+  //   .valid_i   (sldu_ring_valid_i),
+  //   .ready_o   (sldu_ring_ready_o),
+
+  //   .data_o    (fifo_ring_inp),
+  //   .valid_o   (fifo_ring_valid_inp),
+  //   .ready_i   (fifo_ring_ready_out)
+  // );
+
+  // stream_register #(
+  //   .T(elen_t)
+  // ) i_stream_out (
+  //   .clk_i (clk_i),
+  //   .rst_ni (rst_ni), 
+  //   .clr_i     (1'b0), 
+  //   .testmode_i (1'b0),
+
+  //   .data_i    (fifo_ring_out),
+  //   .valid_i   (fifo_ring_valid_out),
+  //   .ready_o   (fifo_ring_ready_inp),
+
+  //   .data_o    (sldu_ring_o),
+  //   .valid_o   (sldu_ring_valid_o),
+  //   .ready_i   (sldu_ring_ready_i)
+  // );
+  
+  // Assigning Interface
+  assign fifo_ring_inp = sldu_ring_i;
+  assign fifo_ring_valid_inp = sldu_ring_valid_i; 
+  assign sldu_ring_ready_o = fifo_ring_ready_out; 
+
+  assign sldu_ring_o = fifo_ring_out; 
+  assign sldu_ring_valid_o = fifo_ring_valid_out;
+  assign fifo_ring_ready_inp = sldu_ring_ready_i; 
 
   elen_t ring_data_prev_d, ring_data_prev_q;
   logic ring_data_prev_valid_d, ring_data_prev_valid_q;
@@ -486,6 +529,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   logic sld_dir_ring;
 
   logic is_edge_cluster, use_fifo_inp;
+  id_cluster_t max_cluster_id; 
+  assign max_cluster_id = (1 << num_clusters_i) - 1;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : proc_ring
     if(~rst_ni) begin
@@ -565,7 +610,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     sld_dir_ring = (vinsn_issue_q.op == VSLIDEDOWN) ? 1'b0 : 1'b1;
     sldu_dir_o = sld_dir_ring;
     bypass_d = bypass_q;
-    sldu_bypass_o = bypass_q;
+    sldu_bypass_o = 1'b0; //bypass_d;
     sldu_config_valid_o = 1'b0;
     
     fifo_ring_out = '0; 
@@ -645,7 +690,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
               out_pnt_d = '0;
 
               // Initialize issue cnt. Pretend to move NrLanes 64-bit elements for (clog2(NrLanes) + 1) times.
-              issue_cnt_d  = NrLanes * ($clog2(NrLanes) + $clog2(NrClusters) + 1 ) << EW64;
+              issue_cnt_d  = NrLanes * ($clog2(NrLanes) + num_clusters_i + 1 ) << EW64;
             end
           endcase
         end
@@ -697,21 +742,20 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
           update_inp_op_pnt = 1'b0;
           if (vinsn_issue_q.op inside {VSLIDEUP, VSLIDEDOWN}) begin
             // Slide operation
-            sldu_config_valid_o = 1'b1;
             if (fifo_ring_ready_inp) begin
+              sldu_config_valid_o = 1'b1;
               fifo_ring_out = vinsn_issue_q.op==VSLIDEDOWN ? sldu_operand[0] : sldu_operand[NrLanes-1];
               fifo_ring_valid_out = 1'b1;
               update_inp_op_pnt = 1'b1;
             end
           end else begin
             // Reduction operation
-            if (issue_cnt_q <= NrLanes * ($clog2(NrClusters) + 1) << EW64) begin
+            if (issue_cnt_q <= NrLanes * (num_clusters_i + 1) << EW64) begin
               // Now we have Inter Cluster reduction, where ring is used.
               
               // Put clusters other than 0 into bypass mode, if it has received all reduction packets.
               // This is because cluster 0 has to receive the last packet after all reductions are done.
               bypass_d = (cluster_id_i !=0) && (cluster_red_cnt_q == cluster_reduction_rx_cnt_init(cluster_id_i));
-
               sldu_config_valid_o = 1'b1;
               sldu_bypass_o = bypass_d;
               
@@ -983,11 +1027,11 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       if (vinsn_queue_d.commit_cnt != '0) begin
         commit_cnt_d = vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].op inside {VSLIDEUP, VSLIDEDOWN}
                      ? vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].vl << int'(vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].vtype.vsew)
-                     : (NrLanes * ($clog2(NrLanes) + 1)) << EW64;
+                     : (NrLanes * $clog2(NrLanes)) << EW64;
 
         // Add packets for inter cluster reduction
         if (vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].vfu inside {VFU_Alu, VFU_MFpu}) begin
-          commit_cnt_d += (NrLanes * ($clog2(NrClusters))) << EW64;
+          commit_cnt_d += (NrLanes * (num_clusters_i + 1)) << EW64;
         end
 
         // Trim vector elements which are not written by the slide unit
@@ -1008,14 +1052,14 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     // If this is inter lane reduction, where ring is not needed, we just set data to valid.
     
     edge_lane_id = (vinsn_ring.op==VSLIDEDOWN || vinsn_ring.vfu inside {VFU_Alu, VFU_MFpu}) ? NrLanes-1 : 0;
-    is_edge_cluster = (cluster_id_i == NrClusters-1 && vinsn_ring.op==VSLIDEDOWN) || (cluster_id_i==0 && vinsn_ring.op==VSLIDEUP);
+    is_edge_cluster = (cluster_id_i == max_cluster_id && vinsn_ring.op==VSLIDEDOWN) || (cluster_id_i==0 && vinsn_ring.op==VSLIDEUP);
     
     // For the edge cluster alone, for slidedown, the last 8*NrLanes bytes should not be ring but from previous ring packet and scalar operand.
     use_fifo_inp = 1'b1;
     if (is_edge_cluster && vinsn_ring.op==VSLIDEDOWN && (ring_cnt_q <= 8*NrLanes)) begin
       use_fifo_inp = 1'b0;
     end
-    if (!result_queue_empty) begin
+    if (result_queue_cnt_d) begin
       if (fifo_ring_valid_inp && use_fifo_inp) begin
             // We have a valid ring packet
             ring_data_prev_d = fifo_ring_inp;
@@ -1096,7 +1140,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             fifo_ring_ready_out = 1'b1;  // Acknowledge fifo that data has been accepted.
       end else begin
           // For the last data for slide1down use the scalar op
-          if (cluster_id_i == NrClusters-1 && vinsn_ring.op==VSLIDEDOWN && (ring_cnt_q <= 8*NrLanes) && ring_data_prev_valid_q) begin
+          if (cluster_id_i == max_cluster_id && vinsn_ring.op==VSLIDEDOWN && (ring_cnt_q <= 8*NrLanes) && ring_data_prev_valid_q) begin
             unique case (vinsn_ring.vtype.vsew)
               EW64: result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {vinsn_ring.scalar_op};
               EW32: result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {vinsn_ring.scalar_op[31:0] , ring_data_prev_q[63:32]};
@@ -1141,7 +1185,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
           // Add packets for inter cluster reduction
           if (vinsn_queue_q.vinsn[vinsn_queue_d.ring_pnt].vfu inside {VFU_Alu, VFU_MFpu}) begin
-            ring_cnt_d += (NrLanes * ($clog2(NrClusters) + 1)) << EW64;
+            ring_cnt_d += (NrLanes * (num_clusters_i + 1)) << EW64;
           end
 
           // Trim vector elements which are not written by the slide unit
@@ -1175,7 +1219,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
         // Add packets for inter cluster reduction
         if (pe_req_i.vfu inside {VFU_Alu, VFU_MFpu}) begin 
-          commit_cnt_d += (NrLanes * ($clog2(NrClusters) + 1)) << EW64;
+          commit_cnt_d += (NrLanes * (num_clusters_i + 1)) << EW64;
         end
 
         // Trim vector elements which are not written by the slide unit
@@ -1193,7 +1237,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
         // Add packets for inter cluster reduction
         if (pe_req_i.vfu inside {VFU_Alu, VFU_MFpu}) begin 
-          ring_cnt_d += (NrLanes * ($clog2(NrClusters) + 1)) << EW64;
+          ring_cnt_d += (NrLanes * (num_clusters_i + 1)) << EW64;
         end
 
         // Trim vector elements which are not written by the slide unit
@@ -1222,7 +1266,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   //         Since 0 is not in bypass 3->0, 0->1 also happens. But the FPU in last lane of cluster-0 and 1, receiving data from SLDU ignores it.
   //         This is tracked by the reduction_rx_cnt_d in FPU. 
   // Last-Step: Finally 3 sends result to 1.
-  function automatic cluster_reduction_rx_cnt_t cluster_reduction_rx_cnt_init(logic[3:0] clusterId);
+  function automatic cluster_reduction_rx_cnt_t cluster_reduction_rx_cnt_init(id_cluster_t clusterId);
     case (clusterId)
       0:  cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(1);
       1:  cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(2);
@@ -1240,6 +1284,22 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       13: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(2);
       14: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(1);
       15: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(5);
+      16: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(1);
+      17: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(2);
+      18: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(1);
+      19: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(3);
+      20: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(1);
+      21: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(2);
+      22: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(1);
+      23: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(4);
+      24: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(1);
+      25: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(2);
+      26: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(1);
+      27: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(3);
+      28: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(1);
+      29: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(2);
+      30: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(1);
+      31: cluster_reduction_rx_cnt_init = cluster_reduction_rx_cnt_t'(6);
     endcase
   endfunction: cluster_reduction_rx_cnt_init
 

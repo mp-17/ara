@@ -10,7 +10,6 @@
 module vmfpu import ara_pkg::*; import rvv_pkg::*; import fpnew_pkg::*;
   import cf_math_pkg::idx_width; #(
     parameter  int           unsigned NrLanes      = 0,
-    parameter  int           unsigned NrClusters   = 0,
     // Support for floating-point data types
     parameter  fpu_support_e          FPUSupport   = FPUSupportHalfSingleDouble,
     // External support for vfrec7, vfrsqrt7, rounding-toward-odd
@@ -26,8 +25,10 @@ module vmfpu import ara_pkg::*; import rvv_pkg::*; import fpnew_pkg::*;
   ) (
     input  logic                         clk_i,
     input  logic                         rst_ni,
+    // Id
     input  logic[idx_width(NrLanes)-1:0] lane_id_i,
-    input  logic[idx_width(NrClusters)-1:0] cluster_id_i,
+    input  id_cluster_t                  cluster_id_i,
+    input  num_cluster_t                 num_clusters_i,
     // Interface with Dispatcher
     output logic                         mfpu_vxsat_o,
     input  vxrm_t                        mfpu_vxrm_i,
@@ -583,7 +584,7 @@ module vmfpu import ara_pkg::*; import rvv_pkg::*; import fpnew_pkg::*;
   // so on. In the end, the result is collected in Lane 0 and the last SIMD reduction is performed.
   // The following function determines how many partial results this lane must process during the
   // inter-lane reduction.
-  typedef logic [idx_width(NrLanes*NrClusters/2):0] reduction_rx_cnt_t;
+  typedef logic [idx_width(NrLanes*MaxNrClusters/2):0] reduction_rx_cnt_t;
   reduction_rx_cnt_t reduction_rx_cnt_d, reduction_rx_cnt_q;
   reduction_rx_cnt_t simd_red_cnt_max_d, simd_red_cnt_max_q;
 
@@ -723,6 +724,13 @@ module vmfpu import ara_pkg::*; import rvv_pkg::*; import fpnew_pkg::*;
       15: reduction_rx_cnt_init = reduction_rx_cnt_t'(4);
     endcase
   endfunction: reduction_rx_cnt_init
+
+  // Inter cluster reductions are handled like inter lane reductions.
+  // In inter cluster only the last lane participates.
+  // Finally, the lane-0 receives the last packet for SIMD
+  id_cluster_t max_cluster_id; 
+  assign max_cluster_id = (1 << num_clusters_i) - 1;
+  
   ///////////
   //  FPU  //
   ///////////
@@ -2025,8 +2033,8 @@ module vmfpu import ara_pkg::*; import rvv_pkg::*; import fpnew_pkg::*;
           first_op_d         = 1'b1;
           reduction_rx_cnt_d = reduction_rx_cnt_init(NrLanes, lane_id_i); // Inter Lane
           if (lane_id_i == NrLanes-1)
-            reduction_rx_cnt_d += reduction_rx_cnt_init(NrClusters, cluster_id_i); // Inter cluster
-          sldu_transactions_cnt_d = $clog2(NrLanes) + $clog2(NrClusters) + 1;
+            reduction_rx_cnt_d += reduction_rx_cnt_init(max_cluster_id, cluster_id_i); // Inter cluster
+          sldu_transactions_cnt_d = $clog2(NrLanes) + num_clusters_i + 1;
 
           // Allow the first valid
           red_hs_synch_d = !(vinsn_issue_d.op inside {VFREDOSUM, VFWREDOSUM}) & is_reduction(vinsn_issue_d.op);
@@ -2106,8 +2114,8 @@ module vmfpu import ara_pkg::*; import rvv_pkg::*; import fpnew_pkg::*;
           first_op_d         = 1'b1;
           reduction_rx_cnt_d = reduction_rx_cnt_init(NrLanes, lane_id_i); // Inter Lane
           if (lane_id_i == NrLanes-1)
-            reduction_rx_cnt_d += reduction_rx_cnt_init(NrClusters, cluster_id_i); // Inter Cluster
-          sldu_transactions_cnt_d = $clog2(NrLanes) + $clog2(NrClusters) + 1;
+            reduction_rx_cnt_d += reduction_rx_cnt_init(max_cluster_id , cluster_id_i); // Inter Cluster
+          sldu_transactions_cnt_d = $clog2(NrLanes) + num_clusters_i + 1;
 
           // Allow the first valid
           red_hs_synch_d = !(vinsn_issue_d.op inside {VFREDOSUM, VFWREDOSUM}) & is_reduction(vinsn_issue_d.op);
@@ -2144,8 +2152,8 @@ module vmfpu import ara_pkg::*; import rvv_pkg::*; import fpnew_pkg::*;
         first_op_d              = 1'b1;
         reduction_rx_cnt_d      = reduction_rx_cnt_init(NrLanes, lane_id_i); // Inter Lane
         if (lane_id_i == NrLanes-1)
-           reduction_rx_cnt_d += reduction_rx_cnt_init(NrClusters, cluster_id_i); // Inter Cluster
-        sldu_transactions_cnt_d = $clog2(NrLanes) + $clog2(NrClusters) + 1;
+           reduction_rx_cnt_d += reduction_rx_cnt_init(max_cluster_id, cluster_id_i); // Inter Cluster
+        sldu_transactions_cnt_d = $clog2(NrLanes) + num_clusters_i + 1;
 
         // Allow the first valid
         red_hs_synch_d          =
