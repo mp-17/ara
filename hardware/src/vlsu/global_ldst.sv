@@ -7,7 +7,7 @@
 // Global load store unit that receives LD-ST AXI request from Ara instances
 // and generates/receives an AXI request/response to/from the System XBAR.
 
-module global_ldst #(
+module global_ldst import ara_pkg::*; import rvv_pkg::*;  #(
   parameter  int unsigned NrLanes             = 0,
   parameter  int unsigned NrClusters          = 0,
   parameter  int unsigned AxiDataWidth        = 0,
@@ -19,12 +19,16 @@ module global_ldst #(
   parameter type axi_resp_t                   = logic,
   parameter type axi_addr_t                   = logic [AxiAddrWidth-1:0],
 
-  localparam int size_axi                 = $clog2(AxiDataWidth)-3,
+  localparam int size_axi                 = $clog2(AxiDataWidth/8),
   localparam int numShuffleStages         = $clog2(AxiDataWidth/(8*NrLanes))-1,
-  localparam logic is_full_bw             = (NrClusters == (AxiDataWidth/ClusterAxiDataWidth)) ? 1'b1 : 1'b0 
+  localparam logic is_full_bw             = (NrClusters == (AxiDataWidth/ClusterAxiDataWidth)) ? 1'b1 : 1'b0,
+  localparam int MaxAxiBurst              = 256
   ) (
   input  logic                           clk_i,
   input  logic                           rst_ni,
+
+  // Interfaces with Ariane
+  input  accelerator_req_t               acc_req_i,
   
   // To ARA
   input  cluster_axi_req_t   [NrClusters-1:0] axi_req_i,
@@ -33,6 +37,22 @@ module global_ldst #(
   // To System AXI 
   input  axi_resp_t                     axi_resp_i,
   output axi_req_t                      axi_req_o
+);
+
+localparam int unsigned MAXVL_CL = VLEN * NrClusters;
+typedef logic [$clog2(MAXVL_CL+1)-1:0] vlen_cl_t;
+vlen_cl_t vl; 
+vtype_t vtype;
+
+global_dispatcher #(
+  .NrClusters   (NrClusters),
+  .vlen_cl_t    (vlen_cl_t )
+) i_global_dispatcher (
+  .clk_i            (clk_i),
+  .rst_ni           (rst_ni),
+  .acc_req_i        (acc_req_i),
+  .vl_o             (vl),
+  .vtype_o          (vtype)
 );
 
 import cf_math_pkg::idx_width;
@@ -47,16 +67,12 @@ logic w_last_d, w_last_q;   // If this is a last write packer
 // Pointers to clusters to which data has to be written or read from
 logic [$clog2(NrClusters)-1:0] cluster_start_r_d, cluster_start_r_q, cluster_start_wr_d, cluster_start_wr_q;
 
-cluster_axi_resp_t [NrClusters-1:0]  cluster_axi_resp_data_d, cluster_axi_resp_data_q;
+cluster_axi_resp_t [NrClusters-1:0] cluster_axi_resp_data_d, cluster_axi_resp_data_q;
 cluster_axi_resp_t [NrClusters-1:0] cluster_axi_resp_data_shuffle;
 cluster_axi_req_t  [NrClusters-1:0] axi_req_data_d, axi_req_data_q; 
 
-int len_r, len_w;
-
 // For Shuffling
 logic [NrClusters-1:0] data_valid;
-
-
 logic [NrClusters-1:0] w_cluster_valid;
 logic [NrClusters-1:0] w_cluster_ready_d, w_cluster_ready_q;
 logic [NrClusters-1:0] w_cluster_last_d, w_cluster_last_q; 
@@ -65,17 +81,27 @@ logic [NrClusters-1:0] w_cluster_last_d, w_cluster_last_q;
 cluster_axi_req_t req_d, req_q;
 axi_req_t req_final;
 logic r_req_valid_d, r_req_valid_q, r_req_ready;
-axi_addr_t aligned_start_addr_d, aligned_next_start_addr_d, aligned_end_addr_d;
-logic [($bits(aligned_start_addr_d) - 12)-1:0] next_2page_msb_d;
-logic [8:0] burst_length; // max 256 
+vlen_cl_t vl_req_d, vl_req_q, vl_done;
+
+axi_req_t req_wrmem;
+logic w_req_valid_d, w_req_valid_q, w_req_ready;
+vlen_cl_t vl_w_d, vl_w_q, vl_w_done;
 
 always_ff @(posedge clk_i or negedge rst_ni) begin
   if(~rst_ni) begin
     r_req_valid_q <= 1'b0;
     req_q         <= '0;
+    vl_req_q      <= '0;
+
+    w_req_valid_q <= 1'b0;
+    vl_w_q        <= '0;
   end else begin
     r_req_valid_q <= r_req_valid_d;
     req_q         <= req_d;
+    vl_req_q      <= vl_req_d;
+
+    w_req_valid_q <= w_req_valid_d;
+    vl_w_q        <= vl_w_d;
   end
 end
 
@@ -85,47 +111,94 @@ always_comb begin : p_global_ldst
   // Combine Request from Lane Groups
   // Here using Cluster-0 as the request and ignoring the other requests.
   // aw channel
-  axi_req_o.aw = axi_req_i[0].aw;
-  // Change the size and len of the req to System AXI
-  len_w = (((axi_req_i[0].aw.len + 1) << axi_req_i[0].aw.size) << $clog2(NrClusters) >> size_axi);
-  if (len_w)
-    axi_req_o.aw.len = len_w - 1;
-  axi_req_o.aw.size = size_axi;
-  axi_req_o.aw_valid = axi_req_i[0].aw_valid;
-  
-  //////////////////
-  // ar channel
   req_d = req_q;
-  r_req_valid_d = r_req_valid_q;
-  r_req_ready = ~r_req_valid_q;
+  w_req_valid_d = w_req_valid_q;
+  w_req_ready = ~w_req_valid_q;
+  vl_w_d = vl_w_q;
 
-  req_final = '0;
+  req_wrmem = '0; 
+  req_wrmem.aw_valid = 1'b0; 
+  
+  if (axi_req_i[0].aw_valid && w_req_ready) begin
+    req_d.aw = axi_req_i[0].aw;
+    w_req_valid_d = 1'b1;
+    vl_w_d = vl;
+  end
+
+  if (w_req_valid_d==1'b1) begin
+    automatic logic [8:0] w_burst_length;
+    automatic logic is_misaligned_w;
+    axi_addr_t wr_aligned_start_addr_d, wr_aligned_next_start_addr_d, wr_aligned_end_addr_d;
+
+    req_wrmem.aw        = req_d.aw;             // Copy request state
+    req_wrmem.aw.size   = size_axi;
+    req_wrmem.aw.cache  = CACHE_MODIFIABLE;
+    req_wrmem.aw.burst  = BURST_INCR;
+    req_wrmem.aw_valid = 1'b1;
+
+    // Check if the address is unaligned for AxiDataWidth bits
+    is_misaligned_w = |(req_wrmem.aw.addr & ((AxiDataWidth/8)-1));
+    wr_aligned_start_addr_d = aligned_addr(req_wrmem.aw.addr, size_axi);
+    wr_aligned_next_start_addr_d = aligned_addr(req_wrmem.aw.addr + (vl_w_d << vtype.vsew) -1, size_axi) + AxiDataWidth/8;
+    wr_aligned_end_addr_d = wr_aligned_next_start_addr_d - 1;
+
+    // 1 - AXI bursts are at most 256 beats long.
+    w_burst_length = MaxAxiBurst;
+    if (w_burst_length > ((wr_aligned_end_addr_d - wr_aligned_start_addr_d) >> size_axi) + 1) begin
+      w_burst_length = ((wr_aligned_end_addr_d - wr_aligned_start_addr_d) >> size_axi) + 1;
+    end else begin
+      // If the max burst length is the limitation, then update the next start address based on max burst
+      wr_aligned_next_start_addr_d = (is_misaligned_w) ? req_wrmem.aw.addr + ((w_burst_length-1) << size_axi) : 
+                                                       req_wrmem.aw.addr + ((w_burst_length) << size_axi);
+    end
+    req_wrmem.aw.len = w_burst_length - 1;
+
+    vl_w_done = (wr_aligned_next_start_addr_d - req_d.aw.addr) >> int'(vtype.vsew);
+    if (vl_w_d > vl_w_done) begin
+      vl_w_d -= vl_w_done;
+      req_d.aw.addr = wr_aligned_next_start_addr_d;     // Update request state
+      w_req_valid_d = 1'b1;
+    end else begin
+      w_req_valid_d = 1'b0;
+    end
+  end
+  axi_req_o.aw = req_wrmem.aw;
+  axi_req_o.aw_valid = req_wrmem.aw_valid; // axi_req_i[0].aw_valid;
+  
+  // Alignment is only done for the read request channel AR
+  // ar channel
+  r_req_valid_d = r_req_valid_q;
+  r_req_ready = ~r_req_valid_q;     // As long as a request is valid, not ready to receive another request
+  vl_req_d = vl_req_q;
+
+  req_final = '0;                   // Request to be send on AXI
   req_final.ar_valid = 1'b0;
 
   if (axi_req_i[0].ar_valid && r_req_ready) begin 
     req_d.ar = axi_req_i[0].ar;
     r_req_valid_d = 1'b1;
+    vl_req_d = vl;
   end
 
   if (r_req_valid_d==1'b1) begin
-    req_final           = req_d;
+    automatic logic [8:0] burst_length;
+    automatic logic is_misaligned_r;
+    axi_addr_t aligned_start_addr_d, aligned_next_start_addr_d, aligned_end_addr_d;
+    logic [($bits(aligned_start_addr_d) - 12)-1:0] next_2page_msb_d;
+
+    req_final.ar        = req_d.ar;             // Copy request state
     req_final.ar.size   = size_axi;
     req_final.ar.cache  = CACHE_MODIFIABLE;
     req_final.ar.burst  = BURST_INCR;
     req_final.ar_valid = 1'b1;
-    
-    // Find len corresponding to axi data width to memory
-    len_r = (((req_d.ar.len + 1) << req_d.ar.size) << $clog2(NrClusters) >> size_axi);
-    if (len_r)
-      len_r = len_r - 1;
 
     // Check if the address is unaligned for AxiDataWidth bits
+    is_misaligned_r = |(req_final.ar.addr & ((AxiDataWidth/8)-1));
     aligned_start_addr_d = aligned_addr(req_final.ar.addr, size_axi);
-    aligned_next_start_addr_d = aligned_addr(req_final.ar.addr + ((len_r+1) << size_axi) - 1, size_axi) + AxiDataWidth/8;
+    aligned_next_start_addr_d = aligned_addr(req_final.ar.addr + (vl_req_d << vtype.vsew) -1, size_axi) + AxiDataWidth/8;
     aligned_end_addr_d = aligned_next_start_addr_d - 1;
     next_2page_msb_d = aligned_start_addr_d[AxiAddrWidth-1:12] + 1;
     
-
     // TODO: Add logic to handle page boundary
 
     /*if (aligned_start_addr_d[AxiAddrWidth-1:12] != aligned_end_addr_d[AxiAddrWidth-1:12]) begin
@@ -134,32 +207,29 @@ always_comb begin : p_global_ldst
     end*/
 
     // 1 - AXI bursts are at most 256 beats long.
-    burst_length = 256;
-    // 2 - The AXI burst length cannot be longer than the number of beats required
-    //     to access the memory regions between aligned_start_addr and
-    //     aligned_end_addr
-    
-    /* if (burst_length > ((aligned_end_addr_d[11:0] - aligned_start_addr_d[11:0]) >> size_axi) + 1)
-       burst_length = ((aligned_end_addr_d[11:0] - aligned_start_addr_d[11:0]) >> size_axi) + 1;
-    */
-    
-    if (burst_length > ((aligned_end_addr_d - aligned_start_addr_d) >> size_axi) + 1)
+    burst_length = MaxAxiBurst;
+    if (burst_length > ((aligned_end_addr_d - aligned_start_addr_d) >> size_axi) + 1) begin
       burst_length = ((aligned_end_addr_d - aligned_start_addr_d) >> size_axi) + 1;
-    len_r = burst_length - 1;
-    req_final.ar.len = len_r;
+    end else begin
+      // If the max burst length is the limitation, then update the next start address based on max burst
+      aligned_next_start_addr_d = (is_misaligned_r) ? req_final.ar.addr + ((burst_length-1) << size_axi) : 
+                                                    req_final.ar.addr + ((burst_length) << size_axi);
+    end
+    req_final.ar.len = burst_length - 1;
 
-    if (req_d.ar.len > len_r) begin
-      req_d.ar.addr = aligned_next_start_addr_d;
+    vl_done = (aligned_next_start_addr_d - req_d.ar.addr) >> int'(vtype.vsew);
+    if (vl_req_d > vl_done) begin
+      vl_req_d -= vl_done;
+      req_d.ar.addr = aligned_next_start_addr_d;     // Update request state
       r_req_valid_d = 1'b1;
     end else begin
+      req_d = '0;
       r_req_valid_d = 1'b0;
     end
   end
-  ///////////////
-  // Set req out to req final generated above
   axi_req_o.ar = req_final.ar;
   axi_req_o.ar_valid = req_final.ar_valid;
-
+  
   // b channel
   axi_req_o.b_ready = axi_req_i[0].b_ready;                                            
   // r channel
@@ -173,7 +243,7 @@ always_comb begin : p_global_ldst
     axi_resp_o[i].b_valid = axi_resp_i.b_valid;
     axi_resp_o[i].b = axi_resp_i.b;
     // aw
-    axi_resp_o[i].aw_ready = axi_resp_i.aw_ready;
+    axi_resp_o[i].aw_ready = axi_resp_i.aw_ready && w_req_ready;
     // ar
     axi_resp_o[i].ar_ready = axi_resp_i.ar_ready && r_req_ready;
   end

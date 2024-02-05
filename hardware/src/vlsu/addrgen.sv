@@ -627,21 +627,25 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
               axi_addrgen_queue_push = 1'b1;
 
               // Account for the requested operands
-              axi_addrgen_d.len = axi_addrgen_q.len -
+              /*axi_addrgen_d.len = axi_addrgen_q.len -
                 ((aligned_end_addr_q - axi_addrgen_q.addr + 1) // ((aligned_end_addr_q[11:0] - axi_addrgen_q.addr[11:0] + 1)
                   >> int'(axi_addrgen_q.vew));
               if (axi_addrgen_q.len <
                 ((aligned_end_addr_q - axi_addrgen_q.addr + 1) // ((aligned_end_addr_q[11:0] - axi_addrgen_q.addr[11:0] + 1)
                   >> int'(axi_addrgen_q.vew)))
                 axi_addrgen_d.len = 0;
-              axi_addrgen_d.addr = aligned_next_start_addr_q;
+              axi_addrgen_d.addr = aligned_next_start_addr_q;*/
 
               // Finished generating AXI requests
-              if (axi_addrgen_d.len == 0) begin
-                addrgen_req_ready   = 1'b1;
-                axi_addrgen_state_d = AXI_ADDRGEN_IDLE;
-              end
-
+              //if (axi_addrgen_d.len == 0) begin
+              
+              // Splitting of request based on burst is done in Global Ld-St unit.
+              // So just say ready and go to idle state.
+              addrgen_req_ready   = 1'b1;
+              axi_addrgen_state_d = AXI_ADDRGEN_IDLE;
+              
+              //end
+              /*
               // Calculate the addresses for the next iteration
               // The start address is found by aligning the original request address by the width of
               // the memory interface. In our case, we have it already.
@@ -664,6 +668,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
                 aligned_end_addr_d        = {aligned_start_addr_d[AxiAddrWidth-1:12], 12'hFFF};
                 aligned_next_start_addr_d = {                       next_2page_msb_d, 12'h000};
               end
+              */
             end else if (state_q != ADDRGEN_IDX_OP) begin
 
               /////////////////////

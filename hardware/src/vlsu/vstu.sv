@@ -21,6 +21,7 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
     parameter  int  unsigned AxiAddrWidth = 0,
     parameter  type          axi_w_t      = logic,
     parameter  type          axi_b_t      = logic,
+    localparam int           MaxAxiBurst  = 256,
     // Dependant parameters. DO NOT CHANGE!
     localparam int           DataWidth    = $bits(elen_t),
     localparam type          strb_t       = logic[DataWidth/8-1:0],
@@ -253,6 +254,9 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
       axi_w_valid_o = 1'b1;
       // Account for the beat we sent
       len_d         = len_q + 1;
+      // Max AXI beats is 256 hence set last=1
+      if (($unsigned(len_d) & (MaxAxiBurst-1)) == 0)
+        axi_w_o.last = 1'b1;
       // We wrote all the beats for this AW burst
       if ($unsigned(len_d) == axi_pkg::len_t'($unsigned(axi_addrgen_req_i.len) + 1)) begin
         axi_w_o.last            = 1'b1;

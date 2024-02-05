@@ -184,6 +184,7 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
   ) i_global_ldst (
     .clk_i     (clk_i),
     .rst_ni    (rst_ni),
+    .acc_req_i (acc_req_i),
     // To Ara
     // .axi_req_i (ldst_axi_req  ),
     // .axi_resp_o(ldst_axi_resp ),
