@@ -199,6 +199,7 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
 
   // Align stage
   align_stage #(
+      .NrClusters   (NrClusters ),
       .AxiDataWidth(AxiDataWidth),
       .AxiAddrWidth(AxiAddrWidth),
       .axi_ar_t   (axi_ar_t     ),
@@ -210,7 +211,8 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
       .axi_resp_t(axi_resp_t)
     ) i_align_stage (
       .clk_i (clk_i), 
-      .rst_ni(rst_ni), 
+      .rst_ni(rst_ni),
+      .acc_req_i(acc_req_i),
       .axi_req_i(axi_req_cut),
       .axi_resp_o(axi_resp_cut),
       .axi_req_o(axi_req_align),

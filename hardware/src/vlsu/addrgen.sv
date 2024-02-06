@@ -491,8 +491,8 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
             eff_axi_dw_d     = AxiDataWidth/8;
             eff_axi_dw_log_d = $clog2(AxiDataWidth/8);
           end
-          /*
-          // The start address is found by aligning the original request address by the width of
+          
+          /*// The start address is found by aligning the original request address by the width of
           // the memory interface.
           aligned_start_addr_d = aligned_addr(axi_addrgen_d.addr, $clog2(AxiDataWidth/8));
           // Pre-calculate the next_2page_msb. This should not require much energy if the addr
@@ -514,12 +514,11 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
           if (aligned_start_addr_d[AxiAddrWidth-1:12] != aligned_end_addr_d[AxiAddrWidth-1:12]) begin
             aligned_end_addr_d        = {aligned_start_addr_d[AxiAddrWidth-1:12], 12'hFFF};
             aligned_next_start_addr_d = {                       next_2page_msb_d, 12'h000};
-          end
-          */
+          end*/
 
-          aligned_start_addr_d = axi_addrgen_d.addr;
+          /*aligned_start_addr_d = axi_addrgen_d.addr;
           aligned_next_start_addr_d = axi_addrgen_d.addr + (axi_addrgen_d.len << int'(axi_addrgen_d.vew));
-          aligned_end_addr_d = aligned_next_start_addr_d - 1;
+          aligned_end_addr_d = aligned_next_start_addr_d - 1;*/
         end
       end
       AXI_ADDRGEN_MISALIGNED: begin
@@ -578,16 +577,20 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
               // 2 - The AXI burst length cannot be longer than the number of beats required
               //     to access the memory regions between aligned_start_addr and
               //     aligned_end_addr
-              if (burst_length > ((aligned_end_addr_q - aligned_start_addr_q) >>
-                    eff_axi_dw_log_q) + 1)
-                burst_length = ((aligned_end_addr_q - aligned_start_addr_q) >>
-                  eff_axi_dw_log_q) + 1;
+              // if (burst_length > ((aligned_end_addr_q - aligned_start_addr_q) >>
+              //       eff_axi_dw_log_q) + 1)
+              // burst_length = ((aligned_end_addr_q - aligned_start_addr_q) >>
+              //   eff_axi_dw_log_q) + 1;
+
+              burst_length = (((axi_addrgen_q.len << int'(axi_addrgen_q.vew))-1) >> $clog2(eff_axi_dw_q)) + 1;
 
               // if (burst_length > ((aligned_end_addr_q[11:0] - aligned_start_addr_q[11:0]) >>
               //       eff_axi_dw_log_q) + 1)
               //   burst_length = ((aligned_end_addr_q[11:0] - aligned_start_addr_q[11:0]) >>
               //     eff_axi_dw_log_q) + 1;
-
+              
+              // The above burst length is only used for vldu and vstu to know how many packets to receive.
+              // The AXI request to Memory in Global Ld-St unit takes care of the maximum burst limit.
               // AR Channel
               if (axi_addrgen_q.is_load) begin
                 axi_ar_o = '{
@@ -627,24 +630,18 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
               axi_addrgen_queue_push = 1'b1;
 
               // Account for the requested operands
-              /*axi_addrgen_d.len = axi_addrgen_q.len -
-                ((aligned_end_addr_q - axi_addrgen_q.addr + 1) // ((aligned_end_addr_q[11:0] - axi_addrgen_q.addr[11:0] + 1)
+              /*axi_addrgen_d.len = axi_addrgen_q.len - ((aligned_end_addr_q[11:0] - axi_addrgen_q.addr[11:0] + 1)
                   >> int'(axi_addrgen_q.vew));
-              if (axi_addrgen_q.len <
-                ((aligned_end_addr_q - axi_addrgen_q.addr + 1) // ((aligned_end_addr_q[11:0] - axi_addrgen_q.addr[11:0] + 1)
+              if (axi_addrgen_q.len < ((aligned_end_addr_q[11:0] - axi_addrgen_q.addr[11:0] + 1)
                   >> int'(axi_addrgen_q.vew)))
                 axi_addrgen_d.len = 0;
-              axi_addrgen_d.addr = aligned_next_start_addr_q;*/
-
+              axi_addrgen_d.addr = aligned_next_start_addr_q;
+              */
               // Finished generating AXI requests
-              //if (axi_addrgen_d.len == 0) begin
-              
-              // Splitting of request based on burst is done in Global Ld-St unit.
-              // So just say ready and go to idle state.
-              addrgen_req_ready   = 1'b1;
-              axi_addrgen_state_d = AXI_ADDRGEN_IDLE;
-              
-              //end
+              // if (axi_addrgen_d.len == 0) begin
+                addrgen_req_ready   = 1'b1;
+                axi_addrgen_state_d = AXI_ADDRGEN_IDLE;
+              // end
               /*
               // Calculate the addresses for the next iteration
               // The start address is found by aligning the original request address by the width of
@@ -667,8 +664,8 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
               if (aligned_start_addr_d[AxiAddrWidth-1:12] != aligned_end_addr_d[AxiAddrWidth-1:12]) begin
                 aligned_end_addr_d        = {aligned_start_addr_d[AxiAddrWidth-1:12], 12'hFFF};
                 aligned_next_start_addr_d = {                       next_2page_msb_d, 12'h000};
-              end
-              */
+              end*/
+              
             end else if (state_q != ADDRGEN_IDX_OP) begin
 
               /////////////////////

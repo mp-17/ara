@@ -22,7 +22,7 @@ module global_ldst import ara_pkg::*; import rvv_pkg::*;  #(
   localparam int size_axi                 = $clog2(AxiDataWidth/8),
   localparam int numShuffleStages         = $clog2(AxiDataWidth/(8*NrLanes))-1,
   localparam logic is_full_bw             = (NrClusters == (AxiDataWidth/ClusterAxiDataWidth)) ? 1'b1 : 1'b0,
-  localparam int MaxAxiBurst              = 256
+  localparam int MaxAxiBurst              = 16
   ) (
   input  logic                           clk_i,
   input  logic                           rst_ni,
@@ -76,6 +76,8 @@ logic [NrClusters-1:0] data_valid;
 logic [NrClusters-1:0] w_cluster_valid;
 logic [NrClusters-1:0] w_cluster_ready_d, w_cluster_ready_q;
 logic [NrClusters-1:0] w_cluster_last_d, w_cluster_last_q; 
+
+int len_r, len_w;
 
 // Handle unaligned AXI
 cluster_axi_req_t req_d, req_q;
@@ -148,8 +150,9 @@ always_comb begin : p_global_ldst
       w_burst_length = ((wr_aligned_end_addr_d - wr_aligned_start_addr_d) >> size_axi) + 1;
     end else begin
       // If the max burst length is the limitation, then update the next start address based on max burst
-      wr_aligned_next_start_addr_d = (is_misaligned_w) ? req_wrmem.aw.addr + ((w_burst_length-1) << size_axi) : 
-                                                       req_wrmem.aw.addr + ((w_burst_length) << size_axi);
+      // wr_aligned_next_start_addr_d = (is_misaligned_w) ? req_wrmem.aw.addr + ((w_burst_length-1) << size_axi) : 
+      //                                                  req_wrmem.aw.addr + ((w_burst_length) << size_axi);
+      wr_aligned_next_start_addr_d = wr_aligned_start_addr_d + ((w_burst_length) << size_axi);
     end
     req_wrmem.aw.len = w_burst_length - 1;
 
@@ -163,7 +166,15 @@ always_comb begin : p_global_ldst
     end
   end
   axi_req_o.aw = req_wrmem.aw;
-  axi_req_o.aw_valid = req_wrmem.aw_valid; // axi_req_i[0].aw_valid;
+  axi_req_o.aw_valid = req_wrmem.aw_valid;
+  
+
+  // axi_req_o.aw = axi_req_i[0].aw;
+  // len_w = (axi_req_i[0].aw.len + 1) << axi_req_i[0].aw.size << $clog2(NrClusters) >> size_axi;
+  // axi_req_o.aw.len = len_w ? len_w-1 : 0;
+  // axi_req_o.aw.size = size_axi;
+  // axi_req_o.aw_valid = axi_req_i[0].aw_valid;
+  
   
   // Alignment is only done for the read request channel AR
   // ar channel
@@ -198,13 +209,6 @@ always_comb begin : p_global_ldst
     aligned_next_start_addr_d = aligned_addr(req_final.ar.addr + (vl_req_d << vtype.vsew) -1, size_axi) + AxiDataWidth/8;
     aligned_end_addr_d = aligned_next_start_addr_d - 1;
     next_2page_msb_d = aligned_start_addr_d[AxiAddrWidth-1:12] + 1;
-    
-    // TODO: Add logic to handle page boundary
-
-    /*if (aligned_start_addr_d[AxiAddrWidth-1:12] != aligned_end_addr_d[AxiAddrWidth-1:12]) begin
-      aligned_end_addr_d        = {aligned_start_addr_d[AxiAddrWidth-1:12], 12'hFFF};
-      aligned_next_start_addr_d = {                       next_2page_msb_d, 12'h000};
-    end*/
 
     // 1 - AXI bursts are at most 256 beats long.
     burst_length = MaxAxiBurst;
@@ -212,8 +216,9 @@ always_comb begin : p_global_ldst
       burst_length = ((aligned_end_addr_d - aligned_start_addr_d) >> size_axi) + 1;
     end else begin
       // If the max burst length is the limitation, then update the next start address based on max burst
-      aligned_next_start_addr_d = (is_misaligned_r) ? req_final.ar.addr + ((burst_length-1) << size_axi) : 
-                                                    req_final.ar.addr + ((burst_length) << size_axi);
+      // aligned_next_start_addr_d = (is_misaligned_r) ? req_final.ar.addr + ((burst_length-1) << size_axi) : 
+      //                                               req_final.ar.addr + ((burst_length) << size_axi);
+      aligned_next_start_addr_d = aligned_start_addr_d + ((burst_length) << size_axi);
     end
     req_final.ar.len = burst_length - 1;
 
@@ -230,6 +235,13 @@ always_comb begin : p_global_ldst
   axi_req_o.ar = req_final.ar;
   axi_req_o.ar_valid = req_final.ar_valid;
   
+
+  // axi_req_o.ar = axi_req_i[0].ar;
+  // len_r = (axi_req_i[0].ar.len + 1) << axi_req_i[0].ar.size << $clog2(NrClusters) >> size_axi;
+  // axi_req_o.ar.len = len_r ? len_r-1 : 0;
+  // axi_req_o.ar.size = size_axi;
+  // axi_req_o.ar_valid = axi_req_i[0].ar_valid;
+  
   // b channel
   axi_req_o.b_ready = axi_req_i[0].b_ready;                                            
   // r channel
@@ -243,9 +255,9 @@ always_comb begin : p_global_ldst
     axi_resp_o[i].b_valid = axi_resp_i.b_valid;
     axi_resp_o[i].b = axi_resp_i.b;
     // aw
-    axi_resp_o[i].aw_ready = axi_resp_i.aw_ready && w_req_ready;
+    axi_resp_o[i].aw_ready = axi_resp_i.aw_ready; // && w_req_ready;
     // ar
-    axi_resp_o[i].ar_ready = axi_resp_i.ar_ready && r_req_ready;
+    axi_resp_o[i].ar_ready = axi_resp_i.ar_ready; // && r_req_ready;
   end
   
   ////////////// Handle BW mismatch between System and ARA for Read Responses
