@@ -127,7 +127,7 @@ always_comb begin : p_global_ldst
     vl_w_d = vl;
   end
 
-  if (w_req_valid_d==1'b1) begin
+  if (w_req_valid_d==1'b1 && axi_resp_i.aw_ready) begin
     automatic logic [8:0] w_burst_length;
     automatic axi_addr_t wr_aligned_start_addr_d, wr_aligned_next_start_addr_d, wr_aligned_end_addr_d;
     automatic logic [($bits(wr_aligned_start_addr_d) - 12)-1:0] wr_next_2page_msb_d;
@@ -192,7 +192,7 @@ always_comb begin : p_global_ldst
     vl_req_d = vl;
   end
 
-  if (r_req_valid_d==1'b1) begin
+  if (r_req_valid_d==1'b1 && axi_resp_i.ar_ready) begin
     automatic logic [8:0] burst_length;
     axi_addr_t aligned_start_addr_d, aligned_next_start_addr_d, aligned_end_addr_d;
     automatic logic [($bits(aligned_start_addr_d) - 12)-1:0] next_2page_msb_d;
@@ -255,9 +255,9 @@ always_comb begin : p_global_ldst
     axi_resp_o[i].b_valid = axi_resp_i.b_valid;
     axi_resp_o[i].b = axi_resp_i.b;
     // aw
-    axi_resp_o[i].aw_ready = axi_resp_i.aw_ready; // && w_req_ready;
+    axi_resp_o[i].aw_ready = w_req_ready; // axi_resp_i.aw_ready && w_req_ready;
     // ar
-    axi_resp_o[i].ar_ready = axi_resp_i.ar_ready; // && r_req_ready;
+    axi_resp_o[i].ar_ready = r_req_ready; // axi_resp_i.ar_ready && r_req_ready;
   end
   
   ////////////// Handle BW mismatch between System and ARA for Read Responses
@@ -353,8 +353,7 @@ always_comb begin : p_global_ldst
   end
 
   for (int i=0; i<NrClusters; i++) begin
-    axi_resp_o[i].w_ready = w_cluster_ready_q[i]; 
-    // axi_resp_o[i].w_ready = w_ready_q; // Set to w_ready_q; Is 1'b1 if the previous write packets have been send to System
+    axi_resp_o[i].w_ready = w_cluster_ready_q[i];
   end
 
 end : p_global_ldst
