@@ -56,7 +56,6 @@ localparam int unsigned NumTrackers=8;
 typedef logic [$clog2(NumTrackers)-1:0] pnt_t; 
 typedef logic [$clog2(NumTrackers):0] cnt_t; 
 
-
 typedef struct packed {
   axi_addr_t addr;
   vlen_t len;
@@ -75,7 +74,6 @@ pnt_t w_pnt_tracker_d, w_pnt_tracker_q;
 pnt_t [NumStages-1:0] r_pnt_tracker_d, r_pnt_tracker_q;
 cnt_t cnt_tracker_d, cnt_tracker_q;
 
-// axi_req_t  [NumStages+1:0] axi_req_cut;
 logic [NumStages:0] axi_req_cut_ready;
 axi_resp_t [NumStages:0] axi_resp_i_cut;
 axi_resp_t [NumStages-1:0] axi_resp_o_cut;
@@ -128,7 +126,6 @@ end
 
 for (genvar s=0; s < NumStages; s++) begin 
 
-
   stream_register #(
     .T       ( axi_r_t )
   ) i_align_reg_r  (
@@ -144,7 +141,6 @@ for (genvar s=0; s < NumStages; s++) begin
     .data_o     ( axi_resp_o_cut[s].r       )
   );
   
-
   shift #(
       .AxiDataWidth( AxiDataWidth ), 
       .axi_data_t  ( axi_resp_t   ),
@@ -219,6 +215,7 @@ always_comb begin
 
     // If last request
     if (vl_d >= vl) begin
+      vl_d = 0;
       w_pnt_tracker_d = w_pnt_tracker_q + 1;
       if (w_pnt_tracker_q == NumTrackers-1) begin 
         w_pnt_tracker_d = 0;
@@ -231,9 +228,7 @@ always_comb begin
   // Once last packet is received by each stage, point to the next tracker.
   for (int s=0; s < NumStages; s++) begin
     if (axi_resp_o_cut[s].r.last && axi_resp_o_cut[s].r_valid && axi_req_cut_ready[s+1]) begin
-      // if (s==(NumStages-1)) begin
-        tracker_d[r_pnt_tracker_q[s]].num_requests[s] -= 1;
-      // end
+      tracker_d[r_pnt_tracker_q[s]].num_requests[s] -= 1;
 
       if (tracker_d[r_pnt_tracker_q[s]].num_requests[s] == 0) begin
         r_pnt_tracker_d[s] = r_pnt_tracker_q[s] + 1;
@@ -371,12 +366,10 @@ always_comb begin
     wr_track_d[wr_pnt_q].len           = axi_req_i.aw.len;
     b_track_d[b_pnt_q].count          += 1;
 
-    if (wr_vl_d == 0) begin
-      wr_cnt_d += 1;
-    end
-    
+    wr_cnt_d += 1;
     wr_pnt_d = (wr_pnt_q == NumTrackers-1) ? 0 : wr_pnt_q + 1;
     if (wr_vl_d >= vl) begin
+      wr_vl_d = 0;
       b_pnt_d = (b_pnt_q == NumTrackers-1) ? 0 : b_pnt_q + 1;
     end
   end
@@ -386,7 +379,7 @@ always_comb begin
 
   if (axi_req_i.w_valid && axi_resp_o.w_ready) begin
     wr_commit_len_d += 1;
-    // If have enough for the request
+    // If received all write packets for the request
     if (wr_commit_len_q == wr_track_d[wr_commit_pnt_q].len) begin
       // Update commit pnt & len
       wr_commit_len_d = '0;
@@ -403,7 +396,7 @@ always_comb begin
 
   if (axi_resp_i.b_valid && axi_req_o.b_ready) begin
     b_track_d[b_commit_pnt_q].count -= 1;
-    if (b_track_d[b_commit_pnt_q].count==0) begin
+    if (b_track_q[b_commit_pnt_q].count==1) begin
       b_commit_pnt_d     = (b_commit_pnt_q == NumTrackers-1) ? 0 : b_commit_pnt_q + 1;
       axi_resp_o.b_valid = 1'b1;
       axi_resp_o.b       = axi_resp_i.b;

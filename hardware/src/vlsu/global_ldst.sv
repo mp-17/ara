@@ -22,7 +22,7 @@ module global_ldst import ara_pkg::*; import rvv_pkg::*;  #(
   localparam int size_axi                 = $clog2(AxiDataWidth/8),
   localparam int numShuffleStages         = $clog2(AxiDataWidth/(8*NrLanes))-1,
   localparam logic is_full_bw             = (NrClusters == (AxiDataWidth/ClusterAxiDataWidth)) ? 1'b1 : 1'b0,
-  localparam int MaxAxiBurst              = 16
+  localparam int MaxAxiBurst              = 256
   ) (
   input  logic                           clk_i,
   input  logic                           rst_ni,
@@ -129,8 +129,8 @@ always_comb begin : p_global_ldst
 
   if (w_req_valid_d==1'b1) begin
     automatic logic [8:0] w_burst_length;
-    automatic logic is_misaligned_w;
-    axi_addr_t wr_aligned_start_addr_d, wr_aligned_next_start_addr_d, wr_aligned_end_addr_d;
+    automatic axi_addr_t wr_aligned_start_addr_d, wr_aligned_next_start_addr_d, wr_aligned_end_addr_d;
+    automatic logic [($bits(wr_aligned_start_addr_d) - 12)-1:0] wr_next_2page_msb_d;
 
     req_wrmem.aw        = req_d.aw;             // Copy request state
     req_wrmem.aw.size   = size_axi;
@@ -139,21 +139,24 @@ always_comb begin : p_global_ldst
     req_wrmem.aw_valid = 1'b1;
 
     // Check if the address is unaligned for AxiDataWidth bits
-    is_misaligned_w = |(req_wrmem.aw.addr & ((AxiDataWidth/8)-1));
     wr_aligned_start_addr_d = aligned_addr(req_wrmem.aw.addr, size_axi);
     wr_aligned_next_start_addr_d = aligned_addr(req_wrmem.aw.addr + (vl_w_d << vtype.vsew) -1, size_axi) + AxiDataWidth/8;
     wr_aligned_end_addr_d = wr_aligned_next_start_addr_d - 1;
-
-    // 1 - AXI bursts are at most 256 beats long.
+    wr_next_2page_msb_d = wr_aligned_start_addr_d[AxiAddrWidth-1:12] + 1;
+    // 1 - Check for 4KB page boundary
+    if (wr_aligned_start_addr_d[AxiAddrWidth-1:12] != wr_aligned_end_addr_d[AxiAddrWidth-1:12]) begin
+      wr_aligned_end_addr_d        = {wr_aligned_start_addr_d[AxiAddrWidth-1:12], 12'hFFF};
+      wr_aligned_next_start_addr_d = {                       wr_next_2page_msb_d, 12'h000};
+    end
+    // 2 - AXI bursts are at most 256 beats long.
     w_burst_length = MaxAxiBurst;
     if (w_burst_length > ((wr_aligned_end_addr_d - wr_aligned_start_addr_d) >> size_axi) + 1) begin
       w_burst_length = ((wr_aligned_end_addr_d - wr_aligned_start_addr_d) >> size_axi) + 1;
     end else begin
-      // If the max burst length is the limitation, then update the next start address based on max burst
-      // wr_aligned_next_start_addr_d = (is_misaligned_w) ? req_wrmem.aw.addr + ((w_burst_length-1) << size_axi) : 
-      //                                                  req_wrmem.aw.addr + ((w_burst_length) << size_axi);
       wr_aligned_next_start_addr_d = wr_aligned_start_addr_d + ((w_burst_length) << size_axi);
+      wr_aligned_end_addr_d = wr_aligned_next_start_addr_d - 1;
     end
+
     req_wrmem.aw.len = w_burst_length - 1;
 
     vl_w_done = (wr_aligned_next_start_addr_d - req_d.aw.addr) >> int'(vtype.vsew);
@@ -167,14 +170,12 @@ always_comb begin : p_global_ldst
   end
   axi_req_o.aw = req_wrmem.aw;
   axi_req_o.aw_valid = req_wrmem.aw_valid;
-  
 
   // axi_req_o.aw = axi_req_i[0].aw;
   // len_w = (axi_req_i[0].aw.len + 1) << axi_req_i[0].aw.size << $clog2(NrClusters) >> size_axi;
   // axi_req_o.aw.len = len_w ? len_w-1 : 0;
   // axi_req_o.aw.size = size_axi;
   // axi_req_o.aw_valid = axi_req_i[0].aw_valid;
-  
   
   // Alignment is only done for the read request channel AR
   // ar channel
@@ -193,9 +194,8 @@ always_comb begin : p_global_ldst
 
   if (r_req_valid_d==1'b1) begin
     automatic logic [8:0] burst_length;
-    automatic logic is_misaligned_r;
     axi_addr_t aligned_start_addr_d, aligned_next_start_addr_d, aligned_end_addr_d;
-    logic [($bits(aligned_start_addr_d) - 12)-1:0] next_2page_msb_d;
+    automatic logic [($bits(aligned_start_addr_d) - 12)-1:0] next_2page_msb_d;
 
     req_final.ar        = req_d.ar;             // Copy request state
     req_final.ar.size   = size_axi;
@@ -204,24 +204,25 @@ always_comb begin : p_global_ldst
     req_final.ar_valid = 1'b1;
 
     // Check if the address is unaligned for AxiDataWidth bits
-    is_misaligned_r = |(req_final.ar.addr & ((AxiDataWidth/8)-1));
     aligned_start_addr_d = aligned_addr(req_final.ar.addr, size_axi);
     aligned_next_start_addr_d = aligned_addr(req_final.ar.addr + (vl_req_d << vtype.vsew) -1, size_axi) + AxiDataWidth/8;
     aligned_end_addr_d = aligned_next_start_addr_d - 1;
     next_2page_msb_d = aligned_start_addr_d[AxiAddrWidth-1:12] + 1;
-
-    // 1 - AXI bursts are at most 256 beats long.
+    // 1 - Check for 4KB page boundary
+    if (aligned_start_addr_d[AxiAddrWidth-1:12] != aligned_end_addr_d[AxiAddrWidth-1:12]) begin
+      aligned_end_addr_d        = {aligned_start_addr_d[AxiAddrWidth-1:12], 12'hFFF};
+      aligned_next_start_addr_d = {                       next_2page_msb_d, 12'h000};
+    end
+    // 2 - AXI bursts are at most 256 beats long.
     burst_length = MaxAxiBurst;
     if (burst_length > ((aligned_end_addr_d - aligned_start_addr_d) >> size_axi) + 1) begin
       burst_length = ((aligned_end_addr_d - aligned_start_addr_d) >> size_axi) + 1;
     end else begin
-      // If the max burst length is the limitation, then update the next start address based on max burst
-      // aligned_next_start_addr_d = (is_misaligned_r) ? req_final.ar.addr + ((burst_length-1) << size_axi) : 
-      //                                               req_final.ar.addr + ((burst_length) << size_axi);
       aligned_next_start_addr_d = aligned_start_addr_d + ((burst_length) << size_axi);
+      aligned_end_addr_d = aligned_next_start_addr_d - 1;
     end
-    req_final.ar.len = burst_length - 1;
 
+    req_final.ar.len = burst_length - 1;
     vl_done = (aligned_next_start_addr_d - req_d.ar.addr) >> int'(vtype.vsew);
     if (vl_req_d > vl_done) begin
       vl_req_d -= vl_done;
@@ -235,7 +236,6 @@ always_comb begin : p_global_ldst
   axi_req_o.ar = req_final.ar;
   axi_req_o.ar_valid = req_final.ar_valid;
   
-
   // axi_req_o.ar = axi_req_i[0].ar;
   // len_r = (axi_req_i[0].ar.len + 1) << axi_req_i[0].ar.size << $clog2(NrClusters) >> size_axi;
   // axi_req_o.ar.len = len_r ? len_r-1 : 0;
