@@ -582,7 +582,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
               // burst_length = ((aligned_end_addr_q - aligned_start_addr_q) >>
               //   eff_axi_dw_log_q) + 1;
 
-              burst_length = (((axi_addrgen_q.len << int'(axi_addrgen_q.vew))-1) >> $clog2(eff_axi_dw_q)) + 1;
+              burst_length = (((axi_addrgen_q.len << int'(axi_addrgen_q.vew))-1) >> eff_axi_dw_log_q) + 1;
 
               // if (burst_length > ((aligned_end_addr_q[11:0] - aligned_start_addr_q[11:0]) >>
               //       eff_axi_dw_log_q) + 1)
