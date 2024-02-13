@@ -359,7 +359,7 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
           vrf_eff_write_bytes = first_payload_byte_q;
         end
         issue_cnt_bytes_d = issue_cnt_bytes_q - vrf_eff_write_bytes;
-        if (issue_cnt_bytes_q < (NrLanes * DataWidthB)) begin : issue_cnt_bytes_overflow
+        if (issue_cnt_bytes_q < vrf_eff_write_bytes) begin : issue_cnt_bytes_overflow
           issue_cnt_bytes_d = '0;
         end : issue_cnt_bytes_overflow
       end : vrf_word_ready
