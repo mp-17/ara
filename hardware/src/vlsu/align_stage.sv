@@ -264,19 +264,25 @@ always_comb begin
   axi_resp_o.r.last     = 1'b0;
   
   // Combine the previous data and the current data packets
-  if (data_prev_valid_q) begin
+  if (data_prev_valid_q && axi_req_cut_ready[NumStages]) begin
+    // If unaligned need current data to be valid to have a valid response
+    automatic logic valid_data = (&be_final_d) | axi_resp_i_cut[NumStages].r_valid;
     for (int b=0; b<AxiDataWidth/8; b++) begin
       axi_resp_o.r.data[b*8 +: 8] = be_final_d[b] ? data_prev_q[b*8 +: 8] : axi_resp_i_cut[NumStages].r.data[b*8 +: 8];
     end
-    axi_resp_o.r_valid  = 1'b1;
     if (last_q) begin
+      // For Aligned data
       axi_resp_o.r.last = 1'b1;
-      data_prev_d       = '0;
-      data_prev_valid_d = 1'b0;
       last_d = 1'b0;
     end
+    if (valid_data) begin
+      axi_resp_o.r_valid  = 1'b1;
+      data_prev_d       = '0;
+      data_prev_valid_d = 1'b0;
+    end
   end
-
+  
+  // For a valid handshake assign to buffer for previous data 
   if (axi_resp_i_cut[NumStages].r_valid && axi_req_cut_ready[NumStages]) begin
     data_prev_d = axi_resp_i_cut[NumStages].r.data;
     data_prev_valid_d     = 1'b1;

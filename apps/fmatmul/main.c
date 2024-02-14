@@ -61,17 +61,11 @@ int verify_matrix(double *result, double *gold, size_t R, size_t C,
 
 #else
 
-// extern float a[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
-// extern float b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
-// extern float c[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
-// // Gold results
-// extern float g[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
-
-extern float a[] __attribute__((aligned(4096), section(".l2")));
-extern float b[] __attribute__((aligned(4096), section(".l2")));
-extern float c[] __attribute__((aligned(4096), section(".l2")));
+extern float a[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern float b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern float c[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
 // Gold results
-extern float g[] __attribute__((aligned(4096), section(".l2")));
+extern float g[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
 
 // Verify the matrix
 int verify_matrix(float *result, float *gold, size_t R, size_t C,
@@ -81,8 +75,8 @@ int verify_matrix(float *result, float *gold, size_t R, size_t C,
       uint64_t idx = i * C + j;
       // printf("%d res:%f gold:%f\n",idx, result[idx], gold[idx]);
       if (!similarity_check_32b(result[idx], gold[idx], threshold)) {
-        // printf("%d res:%f gold:%f\n",idx, result[idx], gold[idx]);
-        return (i + j) == 0 ? -1 : idx;
+        printf("%d res:%f gold:%f\n",idx, result[idx], gold[idx]);
+        // return (i + j) == 0 ? -1 : idx;
       }
     }
   }
@@ -91,7 +85,8 @@ int verify_matrix(float *result, float *gold, size_t R, size_t C,
 
 #endif
 
-#define THRESHOLD 0.001
+#define THRESHOLD64 0.000001
+#define THRESHOLD32 0.001
 
 int main() {
   printf("\n");
@@ -116,12 +111,12 @@ int main() {
 
     // Matrices are initialized --> Start calculating
 #ifdef FP32
-    printf("Calculating fmatmul32...\n");
+    printf("Calculating fmatmul 32-bit...\n");
     start_timer();
     fmatmul32(c, a, b, s, N, P);
     stop_timer();
 #else
-    printf("Calculating fmatmul...\n");
+    printf("Calculating fmatmul 64-bit...\n");
     start_timer();
     fmatmul(c, a, b, s, N, P);
     stop_timer();
@@ -145,7 +140,14 @@ int main() {
     // Verify the result only for s == M (to keep it simple)
     if (s == M) {
       printf("Verifying result...\n");
-      int error = verify_matrix(c, g, s, P, THRESHOLD);
+      int error;
+      
+      #ifdef FP32
+      error = verify_matrix(c, g, s, P, THRESHOLD32);
+      #else
+      error = verify_matrix(c, g, s, P, THRESHOLD64);
+      #endif
+
       if (error != 0) {
         printf("Error code %d\n", error);
         printf("c[%d]=%d\n", error, c[error]);

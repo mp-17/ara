@@ -309,7 +309,7 @@ always_comb begin : p_global_ldst
   // otherwise assign previous request state.
   for (int i=0; i<NrClusters; i++) begin
     axi_req_data_d[i] = w_cluster_ready_q[i] ? axi_req_i[i] : axi_req_data_q[i];
-    w_cluster_last_d[i] = w_cluster_ready_q[i] ? axi_req_i[i].w.last : w_cluster_last_q[i];
+    w_cluster_last_d[i] = w_cluster_ready_q[i] ? axi_req_i[0].w.last : w_cluster_last_q[i];  // Only expecting last signal from cluster-0
   end
   w_last_d = w_ready_q ? axi_req_i[0].w.last : w_last_q;
 

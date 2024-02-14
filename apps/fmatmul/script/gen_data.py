@@ -48,7 +48,7 @@ else:
   print("C = AB with A=[MxN], B=[NxP], C=[MxP]")
   sys.exit()
 
-#dtype = np.float64
+# dtype = np.float64
 dtype = np.float32
 
 # Matrices and results
@@ -64,12 +64,7 @@ emit("M", np.array(M, dtype=np.uint64))
 emit("N", np.array(N, dtype=np.uint64))
 emit("P", np.array(P, dtype=np.uint64))
 
-# emit("a", A, 'NR_LANES*4*NR_CLUSTERS')
-# emit("b", B, 'NR_LANES*4*NR_CLUSTERS')
-# emit("c", C, 'NR_LANES*4*NR_CLUSTERS')
-# emit("g", G, 'NR_LANES*4*NR_CLUSTERS')
-
-emit("a", A, '4096')
-emit("b", B, '4096')
-emit("c", C, '4096')
-emit("g", G, '4096')
+emit("a", A, 'NR_LANES*4*NR_CLUSTERS')
+emit("b", B, 'NR_LANES*4*NR_CLUSTERS')
+emit("c", C, 'NR_LANES*4*NR_CLUSTERS')
+emit("g", G, 'NR_LANES*4*NR_CLUSTERS')
