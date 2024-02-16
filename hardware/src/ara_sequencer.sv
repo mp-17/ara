@@ -134,6 +134,9 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   // Start and End lane //
   ////////////////////////
 
+  pe_req_t pe_req_d;
+  logic    pe_req_valid_d;
+
   // Some units outside the lanes, e.g., the store unit, always need
   // to receive operands from all the lanes. For this reason,
   // we need to know if each lane will need to fetch one operand
@@ -220,9 +223,6 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   } vreg_access_t;
   vreg_access_t [31:0] read_list_d, read_list_q;
   vreg_access_t [31:0] write_list_d, write_list_q;
-
-  pe_req_t pe_req_d;
-  logic    pe_req_valid_d;
 
   // This function determines the VFU responsible for handling this operation.
   function automatic vfu_e vfu(ara_op_e op);
