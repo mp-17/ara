@@ -1924,7 +1924,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       endcase
 
                       // NaN-box the result if needed
-                      unique case (vtype_q.vsew)
+                      unique case (csr_vtype_q.vsew)
                         EW16: begin
                           vfmvfs_result[63:16] = '1;
                           vfmvfs_result[15:0]  = ara_resp_i.resp[15:0];
