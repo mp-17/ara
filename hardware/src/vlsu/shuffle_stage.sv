@@ -103,7 +103,7 @@ stream_join #(
   .oup_valid_o(w_valid[0])
 );
 
-for (genvar s=0; s<NumStages; s++) begin 
+for (genvar s=0; s<NumStages; s++) begin : p_stage
 
   // Shuffling read data
   shuffle #(
@@ -111,7 +111,8 @@ for (genvar s=0; s<NumStages; s++) begin
     .NrClusters          (NrClusters                  ),  
     .ClusterAxiDataWidth (ClusterAxiDataWidth         ),
     .T                   (stage_r_t                   ),
-    .scale               (s)
+    .scale               (s                           ),
+    .isRead              (1                           )
   ) i_shuffle_rd (
     .data_i       ( r_data_in  [s]  ),
     .data_o       ( r_data_out [s]  ),
@@ -143,7 +144,8 @@ for (genvar s=0; s<NumStages; s++) begin
     .NrClusters          (NrClusters                  ),  
     .ClusterAxiDataWidth (ClusterAxiDataWidth         ),
     .T                   (stage_w_t                   ),
-    .scale               (s)
+    .scale               (s                           ),
+    .isRead              (0                           )
   ) i_shuffle_wr (
     .data_i       ( w_data_in  [s]    ),
     .data_o       ( w_data_out [s]    ),
@@ -436,12 +438,14 @@ always_comb begin
           wr_out_ready &= axi_resp_i[c*2 + b].w_ready;
           axi_req_buf_out[c*2 + b].w.data = wrbuf_d   [cluster][b*ClusterAxiDataWidth   +: ClusterAxiDataWidth  ];
           axi_req_buf_out[c*2 + b].w.strb = wrbuf_be_d[cluster][b*ClusterAxiDataWidth/8 +: ClusterAxiDataWidth/8];
-          axi_req_buf_out[c*2 + b].w_valid = 1'b1;
         end
       end
     end
 
     if (wr_out_ready & wr_out_valid) begin
+      // For a valid handshake set valid to 1
+      for (int c=0; c<NrClusters; c++) 
+        axi_req_buf_out[c].w_valid = 1'b1;
       wrbuf_pnt_d = wrbuf_pnt_q + (NrClusters/NumBuffers);
       for (int c=0; c < (NrClusters/NumBuffers); c++) begin
         wrbuf_valid[wrbuf_pnt_q + c] = 1'b0;
@@ -515,6 +519,7 @@ module shuffle import rvv_pkg::*; #(
   parameter  int           unsigned ClusterAxiDataWidth = 0,
   parameter  type                   T                   = logic,
   parameter  int           unsigned scale               = 0, // In bytes
+  parameter  int           unsigned isRead              = 1,
   localparam int           unsigned TotalDataWidth      = ClusterAxiDataWidth * NrClusters,
   localparam int           unsigned TotalLanes          = NrClusters * NrLanes,
   localparam int           unsigned BlockSize           = (8*NrLanes) << scale,            // Sizes to move together (8*N) bits is the base. Doubles every stage.
@@ -537,9 +542,19 @@ module shuffle import rvv_pkg::*; #(
         data_in[c*ClusterAxiDataWidth +: ClusterAxiDataWidth] = data_i[c].data;
       end
       
-      for (int i=0; i < 2; i++) begin                           // Shuffle between 2 adjacent blocks
-        for (int j=0; j < Iterations; j++) begin                // Iterations depend on the stage we are shuffling
-          data_out[(j * Iterations + i)*BlockSize +: BlockSize] = data_in[(i * Iterations + j)*BlockSize  +: BlockSize];
+      if (!isRead) begin
+        // For writes
+        for (int i=0; i < 2; i++) begin                           
+          for (int j=0; j < Iterations; j++) begin                
+              data_out[(i * Iterations + j)*BlockSize +: BlockSize] = data_in[(j * 2 + i)*BlockSize  +: BlockSize];
+          end
+        end
+      end else begin
+        // For Reads
+        for (int i=0; i < Iterations; i++) begin                 
+          for (int j=0; j < 2; j++) begin                        
+              data_out[(i * 2 + j)*BlockSize +: BlockSize] = data_in[(j * Iterations + i)*BlockSize  +: BlockSize];
+          end
         end
       end
 

@@ -67,12 +67,12 @@ res16 = 0
 print(".section .data,\"aw\",@progbits")
 emit("vsize", np.array(vsize, dtype=np.uint64))
 
-# emit("va", v64a, 'NR_LANES*NR_CLUSTERS*4')
-# emit("vb", v64b, 'NR_LANES*NR_CLUSTERS*4')
+emit("va", v64a, 'NR_LANES*NR_CLUSTERS*4')
+emit("vb", v64b, 'NR_LANES*NR_CLUSTERS*4')
 # emit("va", v32a, 'NR_LANES*NR_CLUSTERS*4')
 # emit("vb", v32b, 'NR_LANES*NR_CLUSTERS*4')
-emit("va", v16a, 'NR_LANES*NR_CLUSTERS*4')
-emit("vb", v16b, 'NR_LANES*NR_CLUSTERS*4')
+# emit("va", v16a, 'NR_LANES*NR_CLUSTERS*4')
+# emit("vb", v16b, 'NR_LANES*NR_CLUSTERS*4')
 
 red64 = sum(v64a[0:vsize])
 red32 = sum(v32a[0:vsize])

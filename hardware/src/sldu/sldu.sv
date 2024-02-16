@@ -1086,7 +1086,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
                   endcase
                 end else begin 
                   unique case (vinsn_ring.vtype.vsew)
-                    EW64: result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {fifo_ring_inp};
+                    EW64: result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {ring_data_prev_q};
                     EW32: result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {fifo_ring_inp[31:0],
                                                                                            ring_data_prev_q[63:32]};
                     EW16: result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {fifo_ring_inp[31:16],
@@ -1108,7 +1108,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
                 end else if (vinsn_ring.op==VSLIDEUP) begin
                   // For the 1st packet, we can write only the current ring input and the first 32-bits is filled with scalar op later
                   unique case (vinsn_ring.vtype.vsew)
-                    EW64: result_queue_d[result_queue_write_pnt_q2][0].wdata[63:0]  = {fifo_ring_inp};
+                    EW64: result_queue_d[result_queue_write_pnt_q2][0].wdata[63:0]  = {vinsn_ring.scalar_op};
                     EW32: result_queue_d[result_queue_write_pnt_q2][0].wdata[63:32] = {fifo_ring_inp[31:0]};
                     EW16: result_queue_d[result_queue_write_pnt_q2][0].wdata[63:16] = {fifo_ring_inp[31:16],
                                                                                        fifo_ring_inp[15:0],
