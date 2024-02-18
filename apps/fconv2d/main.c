@@ -29,24 +29,22 @@
 #include "printf.h"
 #endif
 
+// Uncomment the required data type
+// #define T double
+#define T float
+
+// Comment to use FP64
 #define useFP32 1
+
 // Define Matrix dimensions:
 // o = i ° f, with i=[MxN], f=[FxF], o=[MxN]
 // The filter is a square matrix, and F is odd
 
 // Matrices defined in data.S
-
-#ifdef useFP32
-extern float i[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));        // [ (M+floor(F/2)) * (N+floor(F/2)) ]
-extern float f[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));        // [ F*F ]
-extern float o[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));        // [ M*N ]
-extern float golden_o[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS))); // [ M*N ]
-#else
-extern double i[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));        // [ (M+floor(F/2)) * (N+floor(F/2)) ]
-extern double f[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));        // [ F*F ]
-extern double o[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));        // [ M*N ]
-extern double golden_o[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS))); // [ M*N ]
-#endif
+extern T i[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));        // [ (M+floor(F/2)) * (N+floor(F/2)) ]
+extern T f[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));        // [ F*F ]
+extern T o[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));        // [ M*N ]
+extern T golden_o[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS))); // [ M*N ]
 
 // M, N, F defined in data.S
 extern int64_t M;
@@ -54,14 +52,9 @@ extern int64_t N;
 extern int64_t F;
 
 // Verify the matrices
-#ifdef useFP32
-int verify_matrix(float *matrix, float *golden_matrix, int64_t R, int64_t C,
-                  float threshold) {
-#else
-int verify_matrix(double *matrix, double *golden_matrix, int64_t R, int64_t C,
-                  double threshold) {
-#endif
-for (int r = 0; r < R; ++r)
+int verify_matrix(T *matrix, T *golden_matrix, int64_t R, int64_t C, T threshold) 
+{
+  for (int r = 0; r < R; ++r)
     for (int c = 0; c < C; ++c)
     #ifdef useFP32
       if (!similarity_check_32b(matrix[c + C * r], golden_matrix[c + C * r],
@@ -79,13 +72,8 @@ for (int r = 0; r < R; ++r)
 }
 
 
-#ifdef useFP32
-void print_matrix(float const *matrix, uint64_t num_rows,
+void print_matrix(T const *matrix, uint64_t num_rows,
                   uint64_t num_columns) {
-#else
-void print_matrix(double const *matrix, uint64_t num_rows,
-                  uint64_t num_columns) {
-#endif
 printf("0x%8X\n", (uint64_t)matrix);
   for (uint64_t i = 0; i < num_rows; ++i) {
     for (uint64_t j = 0; j < num_columns; ++j) {

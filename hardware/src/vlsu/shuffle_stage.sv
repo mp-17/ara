@@ -229,7 +229,7 @@ always_ff @(posedge clk_i or negedge rst_ni) begin
     // R
     buf_q              <= buf_d;
     buf_valid_q        <= buf_valid_d;
-    rdbuf_pnt_q       <= rdbuf_pnt_d;
+    rdbuf_pnt_q        <= rdbuf_pnt_d;
     shift_q            <= shift_d;
     r_ready_buf_q      <= r_ready_buf;
     // W
@@ -369,7 +369,7 @@ always_comb begin
       if (buf_valid_d[b]) begin
         automatic logic cluster_ready = 1'b1;
         for (int c=0; c < (NrClusters / NumBuffers); c++) begin
-          automatic int cl = b*(NrClusters / NumBuffers) + c;
+          automatic int cl = b ? (NrClusters / NumBuffers) + c : c;
           
           // First Half of the the clusters take data from buf[0]
           axi_resp_buf_out[cl].r.data = buf_d[b][c*2 + shift_d[b]].data;  // 2 works for default 32N configuration to support EW=64
@@ -379,7 +379,7 @@ always_comb begin
         if (cluster_ready) begin
           // Only if handshake is valid, update pointers
           for (int c=0; c < (NrClusters / NumBuffers); c++) begin
-            automatic int cl = b*(NrClusters / NumBuffers) + c; 
+            automatic int cl = b ? (NrClusters / NumBuffers) + c : c; //automatic int cl = b*(NrClusters / NumBuffers) + c; 
             rd_tracker_d[rd_issue_pnt_q[0]].len[cl] -= 1;
             if (rd_tracker_q[rd_issue_pnt_q[0]].len[cl] <= 1) begin
               axi_resp_buf_out[cl].r.last = 1'b1;
@@ -393,10 +393,12 @@ always_comb begin
         end
       end
     end
-    r_ready_buf = ~(&buf_valid_d); // One of the buffers available to receive data
+    
+    // The next buffer has to be available only then ready to receive
+    r_ready_buf = (buf_valid_d[rdbuf_pnt_d] == 1'b0);
 
     // If the last cluster sends the data, remove request from tracker
-    if (rd_buffer_en && axi_resp_buf_out[NrClusters-1].r_valid & axi_resp_buf_out[NrClusters-1].r.last) begin
+    if (axi_resp_buf_out[NrClusters-1].r_valid & axi_resp_buf_out[NrClusters-1].r.last) begin
       for (int s= 0; s < NumStages ; s++)
         rd_issue_pnt_d[s] = (rd_issue_pnt_q[s] == NumTrackers-1) ? '0 : rd_issue_pnt_q[s] + 1;
       rd_cnt_d -= 1'b1;

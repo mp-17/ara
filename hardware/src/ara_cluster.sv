@@ -261,10 +261,10 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
     ) i_request_fork (
     .clk_i  (clk_i),
     .rst_ni (rst_ni),
-    // To Clusters
+    // To CVA6
     .valid_i(acc_req_valid_i),
     .ready_o(acc_req_ready_o),
-    // To CVA6
+    // To Clusters
     .valid_o(acc_req_valid),
     .ready_i(acc_req_ready)
   );
