@@ -25,9 +25,6 @@ module global_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
 
   vlen_cl_t  vl_d, vl_q;
   vtype_t vtype_d, vtype_q;
-  
-  // `FF(vl_q, vl_d, '0, clk_i, rst_ni)
-  // `FF(vtype_q, vtype_d, '{vill: 1'b1, default: '0}, clk_i, rst_ni)
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if(~rst_ni) begin
@@ -54,6 +51,9 @@ module global_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
   endfunction : vtype_xlen
 
   always_comb begin
+    vl_d = vl_q;
+    vtype_d = vtype_q;
+
     if (acc_req_i.req_valid) begin
         // Decode the instructions based on their opcode
         unique case (acc_req_i.insn.itype.opcode)

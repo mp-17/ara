@@ -132,14 +132,16 @@ module ring_router import ara_pkg::*; #(
 	);
 
 	always_comb begin
-		ring_left_valid_out  = 1'b0; 
-		ring_right_valid_out = 1'b0;
-		sldu_valid_o       = 1'b0;
-
-		ring_left_ready_out  = 1'b0; 
-		ring_right_ready_out = 1'b0; 
-		sldu_ready_o       = 1'b0;
-
+		ring_left_out          = '0;
+		ring_left_valid_out    = 1'b0;
+		sldu_ready_o           = 1'b0;
+		sldu_o                 = '0;
+		sldu_valid_o           = 1'b0;
+		ring_right_valid_out   = 1'b0;
+		ring_right_ready_out   = 1'b0;
+    	ring_right_out         = '0;
+		ring_left_ready_out    = 1'b0;
+		
 		bypass_d = conf_valid ? bypass : bypass_q;
 		dir_d    = conf_valid ? dir    : dir_q;
 
@@ -147,19 +149,19 @@ module ring_router import ara_pkg::*; #(
 			if (dir_d==0) begin
 				ring_left_out        = sldu_i;
 				ring_left_valid_out  = sldu_valid_i;
-				sldu_ready_o       = ring_left_ready_inp;
+				sldu_ready_o         = ring_left_ready_inp;
 				  
-				sldu_o             = ring_right_inp;
-				sldu_valid_o       = ring_right_valid_inp;
+				sldu_o               = ring_right_inp;
+				sldu_valid_o         = ring_right_valid_inp;
 				ring_right_ready_out = sldu_ready_i;
 			end else begin
-				ring_right_out        = sldu_i;
-				ring_right_valid_out  = sldu_valid_i;
-				sldu_ready_o       = ring_right_ready_inp;
+				ring_right_out       = sldu_i;
+				ring_right_valid_out = sldu_valid_i;
+				sldu_ready_o         = ring_right_ready_inp;
 
-				sldu_o             = ring_left_inp;
-				sldu_valid_o       = ring_left_valid_inp;
-				ring_left_ready_out = sldu_ready_i;
+				sldu_o               = ring_left_inp;
+				sldu_valid_o         = ring_left_valid_inp;
+				ring_left_ready_out  = sldu_ready_i;
 			end
 		end else begin
 			if (dir_d==0) begin
@@ -167,9 +169,9 @@ module ring_router import ara_pkg::*; #(
 				ring_left_valid_out  = ring_right_valid_inp;
 				ring_right_ready_out = ring_left_ready_inp;
 			end else begin
-				ring_right_out        = ring_left_inp;
-				ring_right_valid_out  = ring_left_valid_inp;
-				ring_left_ready_out   = ring_right_ready_inp;
+				ring_right_out       = ring_left_inp;
+				ring_right_valid_out = ring_left_valid_inp;
+				ring_left_ready_out  = ring_right_ready_inp;
 			end
 		end
 	end

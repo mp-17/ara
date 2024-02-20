@@ -74,11 +74,11 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
   accelerator_resp_t [NrClusters-1:0] acc_resp;
   accelerator_resp_t acc_resp_d, acc_resp_q;
 
-  cluster_axi_req_t      [NrClusters-1:0] ara_axi_req, ara_axi_req_cut, ldst_axi_req;
-  cluster_axi_resp_t     [NrClusters-1:0] ara_axi_resp, ara_axi_resp_cut, ldst_axi_resp;
+  cluster_axi_req_t      [NrClusters-1:0] ara_axi_req, ara_axi_req_cut, ldst_axi_req, ldst_axi_req_cut;
+  cluster_axi_resp_t     [NrClusters-1:0] ara_axi_resp, ara_axi_resp_cut, ldst_axi_resp, ldst_axi_resp_cut;
 
-  axi_req_t  axi_req_cut, axi_req_align;
-  axi_resp_t axi_resp_cut, axi_resp_align;
+  axi_req_t  axi_req_cut, axi_req_ldst, axi_req_align;
+  axi_resp_t axi_resp_cut, axi_resp_ldst, axi_resp_align;
 
   vew_e [NrClusters-1:0] vew_ar, vew_aw;
 
@@ -188,12 +188,33 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
       .axi_req_i          (ara_axi_req_cut      ),
       .axi_resp_o         (ara_axi_resp_cut     ),
 
-      .axi_req_o          (ldst_axi_req         ),
-      .axi_resp_i         (ldst_axi_resp        ),
+      .axi_req_o          (ldst_axi_req_cut         ),
+      .axi_resp_i         (ldst_axi_resp_cut        ),
 
       .vew_ar_i           (vew_ar[0]            ),
       .vew_aw_i           (vew_aw[0]            ) 
   );
+
+  for (genvar cluster=0; cluster < NrClusters; cluster++) begin : p_cluster_cut
+    axi_cut #(
+        .ar_chan_t   (cluster_axi_ar_t     ),
+        .aw_chan_t   (cluster_axi_aw_t     ),
+        .b_chan_t    (cluster_axi_b_t      ),
+        .r_chan_t    (cluster_axi_r_t      ),
+        .w_chan_t    (cluster_axi_w_t      ),
+        .axi_req_t   (cluster_axi_req_t    ),
+        .axi_resp_t  (cluster_axi_resp_t   )
+    ) i_shuffle_axi_cut (
+        .clk_i       (clk_i),
+        .rst_ni      (rst_ni),
+        
+        .slv_req_i   (ldst_axi_req_cut[cluster]),
+        .slv_resp_o  (ldst_axi_resp_cut[cluster]),
+
+        .mst_req_o   (ldst_axi_req[cluster]),
+        .mst_resp_i  (ldst_axi_resp[cluster])
+      );
+  end
   
   // Global Ld/St Unit
   global_ldst #(
@@ -222,6 +243,25 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
     .axi_req_o          (axi_req_cut        )
   );
 
+  axi_cut #(
+    .ar_chan_t   (axi_ar_t     ),
+    .aw_chan_t   (axi_aw_t     ),
+    .b_chan_t    (axi_b_t      ),
+    .r_chan_t    (axi_r_t      ),
+    .w_chan_t    (axi_w_t      ),
+    .axi_req_t   (axi_req_t    ),
+    .axi_resp_t  (axi_resp_t   )
+  ) i_global_axi_cut (
+    .clk_i       (clk_i),
+    .rst_ni      (rst_ni),
+    
+    .slv_req_i   (axi_req_cut),
+    .slv_resp_o  (axi_resp_cut),
+
+    .mst_req_o   (axi_req_ldst),
+    .mst_resp_i  (axi_resp_ldst)
+  );
+
   // Align stage
   align_stage #(
       .NrClusters       (NrClusters         ),
@@ -239,8 +279,11 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
       .rst_ni           (rst_ni             ),
       .acc_req_i        (acc_req_i          ),
 
-      .axi_req_i        (axi_req_cut        ),
-      .axi_resp_o       (axi_resp_cut       ),
+      // .axi_req_i        (axi_req_cut        ),
+      // .axi_resp_o       (axi_resp_cut       ),
+
+      .axi_req_i        (axi_req_ldst        ),
+      .axi_resp_o       (axi_resp_ldst       ),
       
       .axi_req_o        (axi_req_align      ),
       .axi_resp_i       (axi_resp_align     )
