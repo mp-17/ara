@@ -87,6 +87,10 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
   import acc_pkg::accelerator_req_t;
   import acc_pkg::accelerator_resp_t;
 
+  // CVA6 interface cut
+  accelerator_req_t                     acc_req_cut;
+  accelerator_resp_t                    acc_resp_cut;
+
   // Accelerator ports
   accelerator_req_t                     acc_req;
   accelerator_resp_t                    acc_resp;
@@ -236,8 +240,8 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     .scan_enable_i   (scan_enable_i ),
     .scan_data_i     (1'b0          ),
     .scan_data_o     (/* Unused */  ),
-    .acc_req_i       (acc_req       ),
-    .acc_resp_o      (acc_resp      ),
+    .acc_req_i       (acc_req_cut   ),
+    .acc_resp_o      (acc_resp_cut  ),
     .axi_req_o       (ara_axi_req   ),
     .axi_resp_i      (ara_axi_resp  )
   );
@@ -273,13 +277,27 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     .scan_enable_i   (scan_enable_i ),
     .scan_data_i     (1'b0          ),
     .scan_data_o     (/* Unused */  ),
-    .acc_req_i       (acc_req       ),
-    .acc_resp_o      (acc_resp      ),
+    .acc_req_i       (acc_req_cut   ),
+    .acc_resp_o      (acc_resp_cut  ),
     .axi_req_o       (ara_axi_req   ),
     .axi_resp_i      (ara_axi_resp  )
   );
 
 `endif
+
+  // Adding cuts to the CVA6 path to all clusters
+  cva6_cut # (
+    .NrCuts      (1             )
+  ) i_cva6_cut (
+    .clk_i       (clk_i         ), 
+    .rst_ni      (rst_ni        ), 
+
+    .acc_req_i   (acc_req       ),
+    .acc_resp_o  (acc_resp      ),
+
+    .acc_req_o   (acc_req_cut   ),
+    .acc_resp_i  (acc_resp_cut  )
+  );
 
   axi_mux #(
     .SlvAxiIDWidth(AxiIdWidth       ),

@@ -26,8 +26,18 @@ module global_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
   vlen_cl_t  vl_d, vl_q;
   vtype_t vtype_d, vtype_q;
   
-  `FF(vl_q, vl_d, '0)
-  `FF(vtype_q, vtype_d, '{vill: 1'b1, default: '0})
+  // `FF(vl_q, vl_d, '0, clk_i, rst_ni)
+  // `FF(vtype_q, vtype_d, '{vill: 1'b1, default: '0}, clk_i, rst_ni)
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if(~rst_ni) begin
+        vl_q <= 0;
+        vtype_q <= '{vill: 1'b1, default: '0};
+    end else begin
+        vl_q <= vl_d;
+        vtype_q <= vtype_d;
+    end
+  end
 
   assign vl_o = vl_q;
   assign vtype_o = vtype_q;

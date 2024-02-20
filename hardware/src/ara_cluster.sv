@@ -123,8 +123,8 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
         .acc_resp_o        (acc_resp[cluster]   ),
 
         // AXI interface
-        .axi_req_o         (ara_axi_req_cut[cluster]   ),
-        .axi_resp_i        (ara_axi_resp_cut[cluster]  ),
+        .axi_req_o         (ara_axi_req[cluster]   ),
+        .axi_resp_i        (ara_axi_resp[cluster]  ),
 
         .vew_ar_o        (vew_ar[cluster]         ),
         .vew_aw_o        (vew_aw[cluster]         ),
@@ -146,8 +146,27 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
         .ring_data_l_valid_o (ring_data_l_valid  [cluster]                                       ),
         .ring_data_l_ready_i (ring_data_l_ready  [cluster == 0 ? NrClusters-1 : cluster - 1]     )
       );
+
+      axi_cut #(
+        .ar_chan_t   (cluster_axi_ar_t     ),
+        .aw_chan_t   (cluster_axi_aw_t     ),
+        .b_chan_t    (cluster_axi_b_t      ),
+        .r_chan_t    (cluster_axi_r_t      ),
+        .w_chan_t    (cluster_axi_w_t      ),
+        .axi_req_t   (cluster_axi_req_t    ),
+        .axi_resp_t  (cluster_axi_resp_t   )
+      ) i_macro_axi_cut (
+        .clk_i       (clk_i),
+        .rst_ni      (rst_ni),
+        
+        .slv_req_i   (ara_axi_req[cluster]),
+        .slv_resp_o  (ara_axi_resp[cluster]),
+
+        .mst_req_o   (ara_axi_req_cut[cluster]),
+        .mst_resp_i  (ara_axi_resp_cut[cluster])
+      );
   end
-  
+
   //////////////////
   // GLOBAL LD-ST //
   //////////////////
