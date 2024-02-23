@@ -141,9 +141,16 @@ module ring_router import ara_pkg::*; #(
 		ring_right_ready_out   = 1'b0;
     	ring_right_out         = '0;
 		ring_left_ready_out    = 1'b0;
+
+		bypass_d = bypass_q;
+		dir_d = dir_q;
 		
-		bypass_d = conf_valid ? bypass : bypass_q;
-		dir_d    = conf_valid ? dir    : dir_q;
+		if (conf_valid) begin
+			bypass_d = bypass;
+			dir_d = dir;
+		end
+		// bypass_d = conf_valid ? bypass : bypass_q;
+		// dir_d    = conf_valid ? dir    : dir_q;
 
 		if (~bypass_d) begin
 			if (dir_d==0) begin
