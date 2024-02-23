@@ -738,9 +738,9 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
           // Also decide whether to use the ring or not for reductions.
           update_inp_op_pnt = 1'b0;
           if (vinsn_issue_q.op inside {VSLIDEUP, VSLIDEDOWN}) begin
+            sldu_config_valid_o = 1'b1;
             // Slide operation
             if (fifo_ring_ready_inp) begin
-              sldu_config_valid_o = 1'b1;
               fifo_ring_out = vinsn_issue_q.op==VSLIDEDOWN ? sldu_operand[0] : sldu_operand[NrLanes-1];
               fifo_ring_valid_out = 1'b1;
               update_inp_op_pnt = 1'b1;
