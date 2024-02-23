@@ -525,7 +525,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
   // For inter-cluster reductions
   cluster_reduction_rx_cnt_t cluster_red_cnt_d, cluster_red_cnt_q;
-  logic bypass_d, bypass_q;
+  logic bypass;
   logic sld_dir_ring;
 
   logic is_edge_cluster, use_fifo_inp;
@@ -537,13 +537,11 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       ring_data_prev_q       <= '0;
       ring_data_prev_valid_q <= 1'b0;
       cluster_red_cnt_q      <= '0;
-      bypass_q               <= 1'b0;
       ring_cnt_q             <= '0;
     end else begin
       ring_data_prev_q       <= ring_data_prev_d;
       ring_data_prev_valid_q <= ring_data_prev_valid_d;
       cluster_red_cnt_q      <= cluster_red_cnt_d;
-      bypass_q               <= bypass_d;
       ring_cnt_q             <= ring_cnt_d;
     end
   end
@@ -609,8 +607,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     // Ring Interconnect states
     sld_dir_ring = (vinsn_issue_q.op == VSLIDEDOWN) ? 1'b0 : 1'b1;
     sldu_dir_o = sld_dir_ring;
-    bypass_d = bypass_q;
-    sldu_bypass_o = 1'b0; //bypass_d;
+    sldu_bypass_o = 1'b0;
     sldu_config_valid_o = 1'b0;
     
     fifo_ring_out = '0; 
@@ -755,17 +752,17 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
               
               // Put clusters other than 0 into bypass mode, if it has received all reduction packets.
               // This is because cluster 0 has to receive the last packet after all reductions are done.
-              bypass_d = (cluster_id_i !=0) && (cluster_red_cnt_q == cluster_reduction_rx_cnt_init(cluster_id_i));
+              bypass = (cluster_id_i !=0) && (cluster_red_cnt_q == cluster_reduction_rx_cnt_init(cluster_id_i));
               sldu_config_valid_o = 1'b1;
-              sldu_bypass_o = bypass_d;
+              sldu_bypass_o = bypass;
               
-              if (!bypass_d && fifo_ring_ready_inp) begin
+              if (!bypass && fifo_ring_ready_inp) begin
                 fifo_ring_out = sldu_operand[NrLanes-1];
                 fifo_ring_valid_out = 1'b1;
 
                 update_inp_op_pnt = 1'b1;
                 cluster_red_cnt_d = cluster_red_cnt_q + 1;
-              end else if (bypass_d) begin
+              end else if (bypass) begin
                 update_inp_op_pnt = 1'b1;
                 slide_data_valid = 1'b1;
               end
