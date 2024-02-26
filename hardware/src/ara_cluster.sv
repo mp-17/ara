@@ -68,10 +68,10 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
   assign numClusters = $clog2(NrClusters);
   
   // Intermediate signals
-  accelerator_req_t [NrClusters-1:0] acc_req;
+  accelerator_req_t [NrClusters-1:0] acc_req, acc_req_cut;
   logic req_ready, resp_valid;
 
-  accelerator_resp_t [NrClusters-1:0] acc_resp;
+  accelerator_resp_t [NrClusters-1:0] acc_resp, acc_resp_cut;
   accelerator_resp_t acc_resp_d, acc_resp_q;
 
   cluster_axi_req_t      [NrClusters-1:0] ara_axi_req, ara_axi_req_cut, ldst_axi_req, ldst_axi_req_cut;
@@ -119,8 +119,8 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
         .num_clusters_i    (numClusters            ),
 
         // Interface with Ariane
-        .acc_req_i         (acc_req [cluster]   ),
-        .acc_resp_o        (acc_resp[cluster]   ),
+        .acc_req_i         (acc_req_cut [cluster]   ),
+        .acc_resp_o        (acc_resp_cut[cluster]   ),
 
         // AXI interface
         .axi_req_o         (ara_axi_req[cluster]   ),
@@ -183,16 +183,15 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
       .axi_resp_t         (cluster_axi_resp_t   )
     ) i_shuffle_stage (
       .clk_i              (clk_i                ), 
-      .rst_ni             (rst_ni               ), 
+      .rst_ni             (rst_ni               ),
+
+      .acc_req_i          (acc_req_i          ),
 
       .axi_req_i          (ara_axi_req_cut      ),
       .axi_resp_o         (ara_axi_resp_cut     ),
 
       .axi_req_o          (ldst_axi_req_cut         ),
-      .axi_resp_i         (ldst_axi_resp_cut        ),
-
-      .vew_ar_i           (vew_ar[0]            ),
-      .vew_aw_i           (vew_aw[0]            ) 
+      .axi_resp_i         (ldst_axi_resp_cut        )
   );
 
   for (genvar cluster=0; cluster < NrClusters; cluster++) begin : p_cluster_cut
@@ -331,6 +330,22 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
     .ready_i(acc_req_ready)
   );
 
+  // Adding cuts to the CVA6 path to all clusters
+  for (genvar c=0; c<NrClusters; c++) begin 
+    cva6_cut # (
+      .NrCuts      (1             )
+    ) i_cva6_macro_cut (
+      .clk_i       (clk_i         ), 
+      .rst_ni      (rst_ni        ), 
+
+      .acc_req_i   (acc_req[c]       ),
+      .acc_resp_o  (acc_resp[c]      ),
+
+      .acc_req_o   (acc_req_cut[c]   ),
+      .acc_resp_i  (acc_resp_cut[c]  )
+    );
+  end
+
   always_comb begin
     // Implementation of Request Synchronization
     for (int c=0; c<NrClusters; c++) begin
@@ -344,7 +359,7 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
     acc_resp_o.req_ready = acc_req_ready_o;
   end
 
-  if (NrClusters > MaxNrClusters) 
+  if (NrClusters > MaxNrClusters)
     $error("Increase MaxNrClusters in ara_pkg size");
 
 endmodule : ara_cluster
