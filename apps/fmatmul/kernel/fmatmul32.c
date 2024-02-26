@@ -40,9 +40,14 @@ void fmatmul32(float *c, const float *a, const float *b,
   //   fmatmul32_4x4(c, a, b, M, N, P);
   // }
 
-  // fmatmul32_16x16(c, a, b, M, N, P);
-  
-  fmatmul32_4x4(c, a, b, M, N, P);
+  // 32 SP elements per lane for VLEN=1024
+  if (P <= NR_LANES * NR_CLUSTERS * 32) { // Fits with  LMUL=1
+    fmatmul32_16x16(c, a, b, M, N, P);
+  } else if (P <= NR_LANES * NR_CLUSTERS * 32 * 2) {
+    fmatmul32_8x8(c, a, b, M, N, P);        // Need LMUL=2
+  } else {
+    fmatmul32_4x4(c, a, b, M, N, P);        // Need LMUL=4
+  }
 }
 
 // ---------------

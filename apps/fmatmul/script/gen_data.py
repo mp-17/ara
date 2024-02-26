@@ -48,8 +48,8 @@ else:
   print("C = AB with A=[MxN], B=[NxP], C=[MxP]")
   sys.exit()
 
-# dtype = np.float64
-dtype = np.float32
+dtype = np.float64
+# dtype = np.float32
 
 # Matrices and results
 A = np.random.rand(M, N).astype(dtype)

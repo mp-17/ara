@@ -39,7 +39,16 @@ void fmatmul(double *c, const double *a, const double *b,
   //   // we can use LMUL=4, having a vl of 256.
   //   fmatmul_4x4(c, a, b, M, N, P);
   // }
-  fmatmul_4x4(c, a, b, M, N, P);
+
+  // 16 DP elements per lane for VLEN=1024
+  if (P <= NR_LANES * NR_CLUSTERS * 16) { // Fits with  LMUL=1
+    fmatmul_16x16(c, a, b, M, N, P);
+  } else if (P <= NR_LANES * NR_CLUSTERS * 16 * 2) {
+    fmatmul_8x8(c, a, b, M, N, P);        // Need LMUL=2
+  } else {
+    fmatmul_4x4(c, a, b, M, N, P);        // Need LMUL=4
+  }
+  
 }
 
 // ---------------

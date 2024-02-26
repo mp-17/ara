@@ -21,6 +21,7 @@
 // C = AB with A=[MxN], B=[NxP], C=[MxP]
 
 #include "../kernel/fmatmul.h"
+#include "../kernel/fmatmul32.h"
 
 #ifndef WARM_CACHES_ITER
 #define WARM_CACHES_ITER 1
@@ -32,16 +33,21 @@ extern uint64_t M;
 extern uint64_t N;
 extern uint64_t P;
 
-extern double a[] __attribute__((aligned(32 * NR_LANES), section(".l2")));
-extern double b[] __attribute__((aligned(32 * NR_LANES), section(".l2")));
-extern double c[] __attribute__((aligned(32 * NR_LANES), section(".l2")));
+extern double a[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern double b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern double c[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+
+dtype r;
 
 void warm_caches(uint64_t heat) {
   volatile double *a_ = a;
   volatile double buf;
 
   for (uint64_t k = 0; k < heat; ++k)
+  if (sizeof(r) == 8)
     fmatmul(c, a, b, M, N, P);
+  else 
+    fmatmul32(c, a, b, M, N, P);
 #ifdef AD_HOC_WARMING
     // Vector stores have invalidated the A mtx cache lines!
     // Fetch them again
@@ -61,13 +67,28 @@ int main() {
 
   // Measure runtime with a hot cache
   HW_CNT_READY;
-  start_timer();
-  fmatmul(c, a, b, M, N, P);
-  stop_timer();
+
+  if (sizeof(r) == 8) {
+    start_timer();
+    fmatmul(c, a, b, M, N, P);
+    stop_timer();
+  } else {
+    start_timer();
+    fmatmul32(c, a, b, M, N, P);
+    stop_timer();
+  }
 
   int64_t runtime = get_timer();
   float performance = 2.0 * M * N * P / runtime;
-  printf("[sw-cycles]: %ld\n", runtime);
+
+  float utilization;
+  if (sizeof(r) == 8) {
+    utilization = 100 * performance / (2.0 * NR_LANES * NR_CLUSTERS);  
+  } else {
+  utilization = 100 * performance / (2.0 * NR_LANES * NR_CLUSTERS * 2.0);// 2 FP32-ops/lane/cycle
+  }
+
+  printf("M:%d N:%d P=%d [sw-cycles]: %ld performance:%f util:%f%%\n", M, N, P, runtime, performance, utilization);
 
   return 0;
 }

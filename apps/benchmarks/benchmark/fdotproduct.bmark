@@ -42,12 +42,12 @@
 // Vector size in bytes
 extern uint64_t vsize;
 // Input vectors
-extern double   v64a[] __attribute__((aligned(32 * NR_LANES), section(".l2")));
-extern double   v64b[] __attribute__((aligned(32 * NR_LANES), section(".l2")));
-extern float    v32a[] __attribute__((aligned(32 * NR_LANES), section(".l2")));
-extern float    v32b[] __attribute__((aligned(32 * NR_LANES), section(".l2")));
-extern _Float16 v16a[] __attribute__((aligned(32 * NR_LANES), section(".l2")));
-extern _Float16 v16b[] __attribute__((aligned(32 * NR_LANES), section(".l2")));
+extern double   v64a[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern double   v64b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern float    v32a[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern float    v32b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern _Float16 v16a[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern _Float16 v16b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
 // Output scalar
 extern double   res64_v;
 extern float    res32_v;
