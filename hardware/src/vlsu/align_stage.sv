@@ -363,7 +363,7 @@ always_comb begin
   b_pnt_d    = b_pnt_q;
   b_commit_pnt_d = b_commit_pnt_q;
 
-  if (axi_req_i.aw_valid && axi_resp_o.ar_ready) begin
+  if (axi_req_i.aw_valid && axi_resp_o.aw_ready) begin
     automatic int       burst        = axi_req_i.aw.len + 1;
     automatic int       axi_bytes    = AxiDataWidth/8;
     automatic vlen_cl_t vlen_request = ((burst << $clog2(AxiDataWidth/8)) - (axi_req_i.aw.addr[$clog2(AxiDataWidth/8)-1:0])) >> vtype.vsew;
