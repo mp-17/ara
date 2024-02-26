@@ -78,13 +78,11 @@ WITH ACCESS OR USE OF THE SOFTWARE.
 #define _JACOBI2D_H_
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include <riscv_vector.h>
-
-#include "runtime.h"
-#include "util.h"
 
 // The vector algorithm seems not to be parametrized on the data type
 // So, don't change this parameter if also the vector implementation is used
