@@ -100,6 +100,17 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     acc_cons_en               = acc_req.acc_cons_en;
   end
 
+  logic                   en_ld_st_translation;
+  ariane_pkg::exception_t mmu_misaligned_ex;
+  logic                   mmu_req;
+  logic [riscv::VLEN-1:0] mmu_vaddr;
+  logic                   mmu_is_store;
+  logic                   mmu_dtlb_hit;
+  logic [riscv::PPNW-1:0] mmu_dtlb_ppn;
+  logic                   mmu_valid;
+  logic [riscv::PLEN-1:0] mmu_paddr;
+  ariane_pkg::exception_t mmu_exception;
+
 `ifdef IDEAL_DISPATCHER
   // Perfect dispatcher to Ara
   accel_dispatcher_ideal i_accel_dispatcher_ideal (
@@ -132,6 +143,16 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     .ipi_i            ('0                    ),
     .time_irq_i       ('0                    ),
     .debug_req_i      ('0                    ),
+    .en_ld_st_translation_o (en_ld_st_translation ),
+    .acc_mmu_misaligned_ex_i(mmu_misaligned_ex),
+    .acc_mmu_req_i          (mmu_req          ),
+    .acc_mmu_vaddr_i        (mmu_vaddr        ),
+    .acc_mmu_is_store_i     (mmu_is_store     ),
+    .acc_mmu_dtlb_hit_o     (mmu_dtlb_hit     ),
+    .acc_mmu_dtlb_ppn_o     (mmu_dtlb_ppn     ),
+    .acc_mmu_valid_o        (mmu_valid        ),
+    .acc_mmu_paddr_o        (mmu_paddr        ),
+    .acc_mmu_exception_o    (mmu_exception    ),
     .rvfi_o           (                      ),
     // Accelerator ports
     .cvxif_req_o      (acc_req               ),
@@ -222,6 +243,16 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     .scan_enable_i   (scan_enable_i ),
     .scan_data_i     (1'b0          ),
     .scan_data_o     (/* Unused */  ),
+    .en_ld_st_translation_i(en_ld_st_translation),
+    .mmu_misaligned_ex_o(mmu_misaligned_ex),
+    .mmu_req_o(mmu_req),
+    .mmu_vaddr_o(mmu_vaddr),
+    .mmu_is_store_o(mmu_is_store),
+    .mmu_dtlb_hit_i(mmu_dtlb_hit),
+    .mmu_dtlb_ppn_i(mmu_dtlb_ppn),
+    .mmu_valid_i(mmu_valid),
+    .mmu_paddr_i(mmu_paddr),
+    .mmu_exception_i(mmu_exception),
     .acc_req_i       (acc_req       ),
     .acc_resp_o      (acc_resp      ),
     .axi_req_o       (ara_axi_req   ),
