@@ -8,34 +8,6 @@
 #include <sys/signal.h>
 #include "util.h"
 
-#define NUM_COUNTERS 2
-static uintptr_t counters[NUM_COUNTERS];
-static char* counter_names[NUM_COUNTERS];
-
-void setStats(int enable)
-{
-  int i = 0;
-#define READ_CTR(name) do { \
-    while (i >= NUM_COUNTERS) ; \
-    uintptr_t csr = read_csr(name); \
-    if (!enable) { csr -= counters[i]; counter_names[i] = #name; } \
-    counters[i++] = csr; \
-  } while (0)
-
-  // Read from user CSRs
-  READ_CTR(cycle);
-  READ_CTR(instret);
-
-#undef READ_CTR
-}
-
-int __attribute__((weak)) main(int argc, char** argv)
-{
-  // single-threaded programs override this function.
-  printstr("Implement main(), foo!\n");
-  return -1;
-}
-
 #ifndef __linux__
 
 #define SYS_write 64
@@ -62,6 +34,31 @@ static uintptr_t syscall(uintptr_t which, uint64_t arg0, uint64_t arg1, uint64_t
   __sync_synchronize();
   return magic_mem[0];
 }
+
+#endif
+
+#define NUM_COUNTERS 2
+static uintptr_t counters[NUM_COUNTERS];
+static char* counter_names[NUM_COUNTERS];
+
+void setStats(int enable)
+{
+  int i = 0;
+#define READ_CTR(name) do { \
+    while (i >= NUM_COUNTERS) ; \
+    uintptr_t csr = read_csr(name); \
+    if (!enable) { csr -= counters[i]; counter_names[i] = #name; } \
+    counters[i++] = csr; \
+  } while (0)
+
+  // Read from user CSRs
+  READ_CTR(cycle);
+  READ_CTR(instret);
+
+#undef READ_CTR
+}
+
+#ifndef __linux__
 
 void __attribute__((noreturn)) tohost_exit(uintptr_t code)
 {
@@ -96,13 +93,30 @@ void __attribute__((weak)) thread_entry(int cid, int nc)
   while (cid != 0);
 }
 
+#endif
+
+int __attribute__((weak)) main(int argc, char** argv)
+{
+  // single-threaded programs override this function.
+  printstr("Implement main(), foo!\n");
+  return -1;
+}
+
+#ifndef __linux__
+
 static void init_tls()
 {
   register void* thread_pointer asm("tp");
+#ifdef CHESHIRE
   extern char _tls_data;
   extern __thread char _tdata_begin, _tdata_end, _tbss_end;
   size_t tdata_size = &_tdata_end - &_tdata_begin;
   memcpy(thread_pointer, &_tls_data, tdata_size);
+#else
+  extern char _tdata_begin, _tdata_end, _tbss_end;
+  size_t tdata_size = &_tdata_end - &_tdata_begin;
+  memcpy(thread_pointer, &_tdata_begin, tdata_size);
+#endif
   size_t tbss_size = &_tbss_end - &_tdata_end;
   memset(thread_pointer + tdata_size, 0, tbss_size);
 }
@@ -119,7 +133,11 @@ void _init(int cid, int nc)
   char* pbuf = buf;
   for (int i = 0; i < NUM_COUNTERS; i++)
     if (counters[i])
+#ifdef CHESHIRE
       pbuf += sprintf(pbuf, "%s = %d\n", counter_names[i], counters[i]);
+#else
+      pbuf += sprintf(pbuf, "%s = %ld\n", counter_names[i], counters[i]);
+#endif
   if (pbuf != buf)
     printstr(buf);
 
@@ -230,7 +248,7 @@ static void vprintfmt(void (*putch)(int, void**), void **putdat, const char *fmt
     case '-':
       padc = '-';
       goto reswitch;
-      
+
     // flag to pad with 0's instead of spaces
     case '0':
       padc = '0';
@@ -339,7 +357,7 @@ static void vprintfmt(void (*putch)(int, void**), void **putdat, const char *fmt
     case '%':
       putch(ch, putdat);
       break;
-      
+
     // unrecognized escape sequence - just print it literally
     default:
       putch('%', putdat);
@@ -360,19 +378,28 @@ int printf(const char* fmt, ...)
   return 0; // incorrect return value, but who cares, anyway?
 }
 
+#ifndef CHESHIRE
+void sprintf_putch(int ch, void** data)
+{
+  char** pstr = (char**)data;
+  **pstr = ch;
+  (*pstr)++;
+}
+#endif
+
 int sprintf(char* str, const char* fmt, ...)
 {
   va_list ap;
   char* str0 = str;
   va_start(ap, fmt);
-
+#ifdef CHESHIRE
   void sprintf_putch(int ch, void** data)
   {
     char** pstr = (char**)data;
     **pstr = ch;
     (*pstr)++;
   }
-
+#endif
   vprintfmt(sprintf_putch, (void**)&str, fmt, ap);
   *str = 0;
 
