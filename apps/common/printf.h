@@ -29,9 +29,8 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-
 #ifdef __linux__
-  #include <stdio.h>
+#include <stdio.h>
 #else // ! __linux__
 
 #ifndef _PRINTF_H_

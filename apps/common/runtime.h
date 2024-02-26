@@ -9,13 +9,13 @@
 
 // SoC-level CSR, put in memory for Linux build
 #ifdef __linux__
-  int64_t event_trigger;
-  int64_t timer;
-  uint64_t hw_cnt_en_reg;
-#else // ! __linux__
-  extern int64_t event_trigger;
-  extern int64_t timer;
-  extern uint64_t hw_cnt_en_reg;
+int64_t event_trigger;
+int64_t timer;
+uint64_t hw_cnt_en_reg;
+#else  // ! __linux__
+extern int64_t event_trigger;
+extern int64_t timer;
+extern uint64_t hw_cnt_en_reg;
 #endif // __linux__
 
 // Return the current value of the cycle counter
