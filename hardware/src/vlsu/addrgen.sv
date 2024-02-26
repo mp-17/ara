@@ -472,6 +472,9 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
     axi_aw_o       = '0;
     axi_aw_valid_o = 1'b0;
 
+    vew_ar_o = '0; // To be removed
+    vew_aw_o = '0; // To be removed
+
     case (axi_addrgen_state_q)
       AXI_ADDRGEN_IDLE: begin
         if (addrgen_req_valid) begin
@@ -601,7 +604,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
                   burst  : BURST_INCR,
                   default: '0
                 };
-                vew_ar_o = axi_addrgen_q.vew; 
+                vew_ar_o = axi_addrgen_q.vew;
                 axi_ar_valid_o = 1'b1;
               end
               // AW Channel

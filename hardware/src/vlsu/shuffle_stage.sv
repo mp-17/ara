@@ -297,6 +297,9 @@ always_comb begin
   wr_issue_pnt_d = wr_issue_pnt_q;
   wr_cnt_d = wr_cnt_q;
 
+  axi_resp_buf_out = '0;
+  axi_req_buf_out = '0;
+
   //////////////
   // Requests //
   //////////////
@@ -382,7 +385,6 @@ always_comb begin
       rdbuf_pnt_d = (rdbuf_pnt_q == 1'b1) ? 1'b0 : 1'b1;
     end
 
-    axi_resp_buf_out = '0;   // Initialize
     // Assign data in buffer to the output
     for (int b=0; b < NumBuffers; b++) begin
       if (buf_valid_d[b]) begin
@@ -450,7 +452,7 @@ always_comb begin
     // If a buff is full write it to the output
     wr_out_valid = 1'b1;
     wr_out_ready = 1'b1;
-    axi_req_buf_out = '0;
+    
     for (int c=0; c < (NrClusters/2); c++) begin
       automatic int cluster = wrbuf_pnt_q + c;
       wr_out_valid &= wrbuf_full[cluster];
