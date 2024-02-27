@@ -77,8 +77,8 @@ WITH ACCESS OR USE OF THE SOFTWARE.
 
 #define _JACOBI2D_H_
 
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
