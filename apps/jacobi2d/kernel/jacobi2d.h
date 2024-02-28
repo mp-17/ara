@@ -89,18 +89,23 @@ WITH ACCESS OR USE OF THE SOFTWARE.
 // The vector algorithm seems not to be parametrized on the data type
 // So, don't change this parameter if also the vector implementation is used
 #define DATA_TYPE double
+// #define DATA_TYPE float
 
 // Threshold for FP numbers comparison during the final check
 #define THRESHOLD 0.000001
+#define THRESHOLD32 0.0001
+
 
 // #define SOURCE_PRINT
 // #define RESULT_PRINT
 
 void j2d_s(uint64_t r, uint64_t c, DATA_TYPE *A, DATA_TYPE *B, uint64_t tsteps);
 void j2d_v(uint64_t r, uint64_t c, DATA_TYPE *A, DATA_TYPE *B, uint64_t tsteps);
+void j2d_v32(uint64_t r, uint64_t c, DATA_TYPE *A, DATA_TYPE *B, uint64_t tsteps);
 void j2d_kernel_v(uint64_t r, uint64_t c, DATA_TYPE *A, DATA_TYPE *B);
 void j2d_kernel_opt_v(uint64_t r, uint64_t c, DATA_TYPE *A, DATA_TYPE *B);
 void j2d_kernel_asm_v(uint64_t r, uint64_t c, DATA_TYPE *A, DATA_TYPE *B);
+void j2d_kernel_asm_v32(uint64_t r, uint64_t c, DATA_TYPE *A, DATA_TYPE *B);
 
 int check_result(uint64_t r, uint64_t c, DATA_TYPE *A_s, DATA_TYPE *B_s,
                  DATA_TYPE *A_v, DATA_TYPE *B_v);

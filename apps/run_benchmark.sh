@@ -6,17 +6,17 @@ dtype=$2
 
 mkdir -p logs/$app
 
-for nr_clusters in 4
+for nr_clusters in 2 4 8
 do
 for nr_lanes in 4
 do
+
 #Build hw
 cd ../hardware/
 make clean && make compile nr_clusters=${nr_clusters} config=${nr_lanes}_lanes
 cd ../apps/
 
-# for bytes_lane in 128 64 32 16 8
-for bytes_lane in 16 8
+for bytes_lane in 128 64 32 16 8
 do
 
 len=$((bytes_lane * nr_lanes * nr_clusters/ 8))
@@ -25,16 +25,21 @@ echo "C=$nr_clusters L=$nr_lanes LEN=$len"
 # Benchmark parameters
 if [[ $app == "fmatmul" ]]
 then
-  args_app="16 4 $len"
+  args_app="256 256 $len"
   str_app=FMATMUL
 elif [[ $app == "fconv2d" ]]
 then
-  args_app="16 $len 7"
+  args_app="256 $len 7"
   str_app=FCONV2D
 elif [[ $app == "fdotproduct" ]]
 then
   args_app="$len"
   str_app=FDOTPRODUCT
+elif [[ $app == "jacobi2d" ]]
+then
+  r=$((len+2))
+  args_app="256 $r"
+  str_app=JACOBI2D
 else 
   echo "SPECIFY app and dtype as 2 arguments to script!"
 fi

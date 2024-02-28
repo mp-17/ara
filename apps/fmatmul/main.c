@@ -36,7 +36,7 @@ extern uint64_t M;
 extern uint64_t N;
 extern uint64_t P;
 
-#define FP32 1
+// #define FP32 1
 
 #ifndef FP32
 extern double a[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));

@@ -43,12 +43,14 @@ else:
   sys.exit()
 
 dtype = np.float64
+# dtype = np.float32
 
 TSTEPS = 1
 
 # Fill in the extra data to align the matrices to 4*NrLanes in SW
-maxNrLanes   = 16
-maxAlignment = 4*maxNrLanes              # [B]
+maxNrLanes   = 8
+maxClusters  = 16
+maxAlignment = 4*maxNrLanes*maxClusters  # [B]
 sizeOfDType  = np.dtype(dtype).itemsize  # [B]
 R_ext = int(R + (maxAlignment / sizeOfDType))
 C_ext = int(C + (maxAlignment / sizeOfDType))
@@ -62,7 +64,7 @@ print(".section .data,\"aw\",@progbits")
 emit("R", np.array(R, dtype=np.uint64))
 emit("C", np.array(C, dtype=np.uint64))
 emit("TSTEPS", np.array(TSTEPS, dtype=np.uint64))
-emit("A_v", A, 'NR_LANES*4')
-emit("B_v", B, 'NR_LANES*4')
-emit("A_s", A, 'NR_LANES*4')
-emit("B_s", B, 'NR_LANES*4')
+emit("A_v", A, 'NR_LANES*4*NR_CLUSTERS')
+emit("B_v", B, 'NR_LANES*4*NR_CLUSTERS')
+emit("A_s", A, 'NR_LANES*4*NR_CLUSTERS')
+emit("B_s", B, 'NR_LANES*4*NR_CLUSTERS')

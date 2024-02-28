@@ -30,11 +30,11 @@
 #endif
 
 // Uncomment the required data type
-// #define T double
-#define T float
+#define T double
+// #define T float
 
 // Comment to use FP64
-#define useFP32 1
+// #define useFP32 1
 
 // Define Matrix dimensions:
 // o = i ° f, with i=[MxN], f=[FxF], o=[MxN]

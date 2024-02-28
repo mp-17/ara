@@ -628,7 +628,13 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
     unique case (state_q)
       SLIDE_IDLE: begin
-        if (vinsn_issue_valid_q) begin
+        // To check if ara's in sync to avoid data getting lost in the ring.
+        // E.g. for slideup -> slidedown instr., ring direction changes
+        // and so if all ring packets not handled properly, it stalls.
+        automatic logic inSync = vinsn_issue_valid_q && 
+                                   (vinsn_queue_d.issue_pnt == vinsn_queue_d.ring_pnt); 
+        // if (vinsn_issue_valid_q) begin
+        if (inSync) begin
           state_d   = vinsn_issue_q.is_stride_np2 ? SLIDE_NP2_SETUP : SLIDE_RUN;
           vrf_pnt_d = '0;
 
