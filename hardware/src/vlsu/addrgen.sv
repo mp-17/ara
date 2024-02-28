@@ -472,8 +472,8 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
     axi_aw_o       = '0;
     axi_aw_valid_o = 1'b0;
 
-    vew_ar_o = '0; // To be removed
-    vew_aw_o = '0; // To be removed
+    vew_ar_o = vew_e'('0); // To be removed
+    vew_aw_o = vew_e'('0); // To be removed
 
     case (axi_addrgen_state_q)
       AXI_ADDRGEN_IDLE: begin

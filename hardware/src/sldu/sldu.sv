@@ -1058,7 +1058,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     end
     
     if (result_queue_cnt_d && 
-        ((vinsn_queue_d.issue_pnt != vinsn_queue_d.ring_pnt) || ((issue_cnt_d < ring_cnt_q) && (vinsn_queue_d.issue_pnt == vinsn_queue_d.ring_pnt)))) begin
+        ((vinsn_queue_d.issue_pnt != vinsn_queue_d.ring_pnt) || ((issue_cnt_d < ring_cnt_d) && (vinsn_queue_d.issue_pnt == vinsn_queue_d.ring_pnt)))) begin
       // If we are in the same instruction and we expect a fifo packet, only then process a fifo packet
       // Otherwise issue has already gone to the next instruction in which case fifo packets are to be used.
       if (fifo_ring_valid_inp && use_fifo_inp) begin

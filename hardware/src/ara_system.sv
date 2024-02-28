@@ -87,6 +87,10 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
   import acc_pkg::accelerator_req_t;
   import acc_pkg::accelerator_resp_t;
 
+  // System axi cut
+  system_axi_req_t         axi_req_o_cut;
+  system_axi_resp_t        axi_resp_i_cut;
+  
   // CVA6 interface cut
   accelerator_req_t                     acc_req_cut;
   accelerator_resp_t                    acc_resp_cut;
@@ -326,8 +330,27 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     .test_i     (1'b0                                 ),
     .slv_reqs_i ({ara_axi_req_inval, ariane_axi_req}  ),
     .slv_resps_o({ara_axi_resp_inval, ariane_axi_resp}),
-    .mst_req_o  (axi_req_o                            ),
-    .mst_resp_i (axi_resp_i                           )
+    .mst_req_o  (axi_req_o_cut                            ),
+    .mst_resp_i (axi_resp_i_cut                           )
+  );
+  
+  axi_cut #(
+    .ar_chan_t   (system_axi_ar_t     ),
+    .aw_chan_t   (system_axi_aw_t     ),
+    .b_chan_t    (system_axi_b_t      ),
+    .r_chan_t    (system_axi_r_t      ),
+    .w_chan_t    (system_axi_w_t      ),
+    .axi_req_t   (system_axi_req_t    ),
+    .axi_resp_t  (system_axi_resp_t   )
+  ) i_system_axi_cut (
+    .clk_i       (clk_i),
+    .rst_ni      (rst_ni),
+    
+    .slv_req_i   (axi_req_o_cut),
+    .slv_resp_o  (axi_resp_i_cut),
+
+    .mst_req_o   (axi_req_o),
+    .mst_resp_i  (axi_resp_i)
   );
 
 endmodule : ara_system
