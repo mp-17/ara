@@ -85,6 +85,9 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
   // Ring connections
   remote_data_t [NrClusters-1:0] ring_data_l, ring_data_r; 
   logic [NrClusters-1:0] ring_data_l_ready, ring_data_l_valid, ring_data_r_ready, ring_data_r_valid; 
+
+  remote_data_t [NrClusters-1:0] ring_data_l_cut, ring_data_r_cut; 
+  logic [NrClusters-1:0] ring_data_l_ready_cut, ring_data_l_valid_cut, ring_data_r_ready_cut, ring_data_r_valid_cut;
   
   /////////
   // ARA //
@@ -130,13 +133,29 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
         .vew_aw_o        (vew_aw[cluster]         ),
 
         // Ring
-        .ring_data_r_i       (ring_data_l        [cluster == NrClusters-1 ? 0 : cluster + 1]     ),
-        .ring_data_r_valid_i (ring_data_l_valid  [cluster == NrClusters-1 ? 0 : cluster + 1]     ),
-        .ring_data_r_ready_o (ring_data_l_ready  [cluster]                                       ), 
+        // .ring_data_r_i       (ring_data_l        [cluster == NrClusters-1 ? 0 : cluster + 1]     ),
+        // .ring_data_r_valid_i (ring_data_l_valid  [cluster == NrClusters-1 ? 0 : cluster + 1]     ),
+        // .ring_data_r_ready_o (ring_data_l_ready  [cluster]                                       ), 
 
-        .ring_data_l_i       (ring_data_r        [cluster == 0 ? NrClusters-1 : cluster - 1]     ),
-        .ring_data_l_valid_i (ring_data_r_valid  [cluster == 0 ? NrClusters-1 : cluster - 1]     ),
-        .ring_data_l_ready_o (ring_data_r_ready  [cluster]                                       ), 
+        // .ring_data_l_i       (ring_data_r        [cluster == 0 ? NrClusters-1 : cluster - 1]     ),
+        // .ring_data_l_valid_i (ring_data_r_valid  [cluster == 0 ? NrClusters-1 : cluster - 1]     ),
+        // .ring_data_l_ready_o (ring_data_r_ready  [cluster]                                       ), 
+
+        // .ring_data_r_o       (ring_data_r        [cluster]                                       ),
+        // .ring_data_r_valid_o (ring_data_r_valid  [cluster]                                       ),
+        // .ring_data_r_ready_i (ring_data_r_ready  [cluster == NrClusters-1 ? 0 : cluster + 1]     ), 
+
+        // .ring_data_l_o       (ring_data_l        [cluster]                                       ),
+        // .ring_data_l_valid_o (ring_data_l_valid  [cluster]                                       ),
+        // .ring_data_l_ready_i (ring_data_l_ready  [cluster == 0 ? NrClusters-1 : cluster - 1]     )
+
+        .ring_data_r_i       (ring_data_l_cut        [cluster == NrClusters-1 ? 0 : cluster + 1]     ),
+        .ring_data_r_valid_i (ring_data_l_valid_cut  [cluster == NrClusters-1 ? 0 : cluster + 1]     ),
+        .ring_data_r_ready_o (ring_data_l_ready  [cluster]                                           ), 
+
+        .ring_data_l_i       (ring_data_r_cut        [cluster == 0 ? NrClusters-1 : cluster - 1]     ),
+        .ring_data_l_valid_i (ring_data_r_valid_cut  [cluster == 0 ? NrClusters-1 : cluster - 1]     ),
+        .ring_data_l_ready_o (ring_data_r_ready_cut  [cluster]                                       ), 
 
         .ring_data_r_o       (ring_data_r        [cluster]                                       ),
         .ring_data_r_valid_o (ring_data_r_valid  [cluster]                                       ),
@@ -144,7 +163,39 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
 
         .ring_data_l_o       (ring_data_l        [cluster]                                       ),
         .ring_data_l_valid_o (ring_data_l_valid  [cluster]                                       ),
-        .ring_data_l_ready_i (ring_data_l_ready  [cluster == 0 ? NrClusters-1 : cluster - 1]     )
+        .ring_data_l_ready_i (ring_data_l_ready_cut  [cluster == 0 ? NrClusters-1 : cluster - 1]     )
+      );
+
+      // Cuts on the ring interface
+      // To meet timing at the top level
+      spill_register #(
+        .T(elen_t)
+      ) i_ring_macro_spill_left (
+        .clk_i  (clk_i                        ),
+        .rst_ni (rst_ni                       ),
+        
+        .valid_i(ring_data_l_valid         [cluster]                                     ),
+        .ready_o(ring_data_l_ready_cut     [cluster == 0 ? NrClusters-1 : cluster - 1]   ),
+        .data_i (ring_data_l               [cluster]                                     ),
+
+        .valid_o(ring_data_l_valid_cut     [cluster]   ),
+        .ready_i(ring_data_l_ready         [cluster == 0 ? NrClusters-1 : cluster - 1]    ),
+        .data_o (ring_data_l_cut           [cluster]   )
+      );
+
+      spill_register #(
+        .T(elen_t)
+      ) i_ring_macro_spill_right (
+        .clk_i  (clk_i                        ),
+        .rst_ni (rst_ni                       ),
+        
+        .valid_i(ring_data_r_valid     [cluster]                                     ),
+        .ready_o(ring_data_r_ready     [cluster == NrClusters-1 ? 0 : cluster + 1]   ),
+        .data_i (ring_data_r           [cluster]                                     ),
+        
+        .valid_o(ring_data_r_valid_cut         [cluster]                                       ),
+        .ready_i(ring_data_r_ready_cut         [cluster == NrClusters-1 ? 0 : cluster + 1]     ),
+        .data_o (ring_data_r_cut               [cluster]                                       )
       );
 
       axi_cut #(
