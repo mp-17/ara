@@ -96,10 +96,10 @@ extern uint64_t C;
 
 extern uint64_t TSTEPS;
 
-extern DATA_TYPE A_v[] __attribute__((aligned(4 * NR_LANES), section(".l2")));
-extern DATA_TYPE B_v[] __attribute__((aligned(4 * NR_LANES), section(".l2")));
-extern DATA_TYPE A_s[] __attribute__((aligned(4 * NR_LANES), section(".l2")));
-extern DATA_TYPE B_s[] __attribute__((aligned(4 * NR_LANES), section(".l2")));
+extern DATA_TYPE A_v[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern DATA_TYPE B_v[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern DATA_TYPE A_s[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern DATA_TYPE B_s[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
 
 void warm_caches(uint64_t heat, DATA_TYPE* A_fixed_v, DATA_TYPE* B_fixed_v) {
 
@@ -116,7 +116,7 @@ void warm_caches(uint64_t heat, DATA_TYPE* A_fixed_v, DATA_TYPE* B_fixed_v) {
 int main() {
 
   // Align the matrices so that the vector store will also be aligned
-  size_t mtx_offset = ((4 * NR_LANES) / sizeof(DATA_TYPE)) - 1;
+  size_t mtx_offset = ((4 * NR_LANES * NR_CLUSTERS) / sizeof(DATA_TYPE)) - 1;
   DATA_TYPE *A_fixed_v = A_v + mtx_offset;
   DATA_TYPE *B_fixed_v = B_v + mtx_offset;
   DATA_TYPE *A_fixed_s = A_s + mtx_offset;
