@@ -394,13 +394,13 @@ always_comb begin
           
           // First Half of the the clusters take data from buf[0]
           axi_resp_buf_out[cl].r.data = buf_d[b][c*2 + shift_d[b]].data;  // 2 works for default 32N configuration to support EW=64
-          axi_resp_buf_out[cl].r_valid = 1'b1;
           cluster_ready &= axi_req_i[cl].r_ready;
         end
         if (cluster_ready) begin
           // Only if handshake is valid, update pointers
           for (int c=0; c < (NrClusters / NumBuffers); c++) begin
-            automatic int cl = b ? (NrClusters / NumBuffers) + c : c; //automatic int cl = b*(NrClusters / NumBuffers) + c; 
+            automatic int cl = b ? (NrClusters / NumBuffers) + c : c; //automatic int cl = b*(NrClusters / NumBuffers) + c;
+            axi_resp_buf_out[cl].r_valid = 1'b1;
             rd_tracker_d[rd_issue_pnt_q[0]].len[cl] -= 1;
             if (rd_tracker_q[rd_issue_pnt_q[0]].len[cl] <= 1) begin
               axi_resp_buf_out[cl].r.last = 1'b1;

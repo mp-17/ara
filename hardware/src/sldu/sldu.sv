@@ -1059,7 +1059,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     
     // For the edge cluster alone, for slidedown, the last 8*NrLanes bytes should not be ring but from previous ring packet and scalar operand.
     use_fifo_inp = 1'b1;
-    if (is_edge_cluster && vinsn_ring.op==VSLIDEDOWN && (ring_cnt_q <= 8*NrLanes)) begin
+    if (is_edge_cluster && vinsn_ring.op==VSLIDEDOWN && (ring_cnt_q <= 8*NrLanes) && ring_data_prev_valid_q) begin
       use_fifo_inp = 1'b0;
     end
     
