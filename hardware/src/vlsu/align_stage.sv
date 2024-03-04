@@ -159,11 +159,11 @@ assign tracker_empty = (cnt_tracker_q==0);
 
 // Req Channel assignments
 assign axi_req_o.aw = axi_req_i.aw;
-assign axi_req_o.aw_valid = axi_req_i.aw_valid;
+assign axi_req_o.aw_valid = axi_req_i.aw_valid && axi_resp_o.aw_ready;
 // assign axi_req_o.w = axi_req_i.w;
 assign axi_req_o.w_valid = axi_req_i.w_valid;
 assign axi_req_o.ar = axi_req_i.ar;
-assign axi_req_o.ar_valid = axi_req_i.ar_valid;
+assign axi_req_o.ar_valid = axi_req_i.ar_valid && axi_resp_o.ar_ready;
 assign axi_req_o.b_ready = axi_req_i.b_ready;
 
 assign axi_req_o.r_ready  = axi_req_cut_ready[0];

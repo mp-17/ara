@@ -384,7 +384,7 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
   // Adding cuts to the CVA6 path to all clusters
   for (genvar c=0; c<NrClusters; c++) begin 
     cva6_cut # (
-      .NrCuts      (1             )
+      .NrCuts      (2             )
     ) i_cva6_macro_cut (
       .clk_i       (clk_i         ), 
       .rst_ni      (rst_ni        ), 
