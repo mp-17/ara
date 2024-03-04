@@ -1,3 +1,11 @@
+// Copyright 2021 ETH Zurich and University of Bologna.
+// Solderpad Hardware License, Version 0.51, see LICENSE for details.
+// SPDX-License-Identifier: SHL-0.51
+//
+// Author: Navaneeth Kunhi Purayil <nkunhi@student.ethz.ch>
+// Description:
+// Module to cut the request interface from CVA6
+
 module cva6_cut import ara_pkg::*; import rvv_pkg::*; #(
   parameter int unsigned NrCuts = 1
 ) (

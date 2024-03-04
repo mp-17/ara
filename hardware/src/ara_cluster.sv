@@ -89,6 +89,22 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
   remote_data_t [NrClusters-1:0] ring_data_l_cut, ring_data_r_cut; 
   logic [NrClusters-1:0] ring_data_l_ready_cut, ring_data_l_valid_cut, ring_data_r_ready_cut, ring_data_r_valid_cut;
   
+  // Hierarchical stream fork
+  localparam int nlevels = $clog2(NrClusters);
+  typedef accelerator_req_t [NrClusters-1:0] fork_req_t;
+  typedef accelerator_resp_t [NrClusters-1:0] fork_resp_t;
+
+  fork_req_t  [nlevels : 0] acc_req_fork;
+  fork_resp_t [nlevels : 0] acc_resp_fork;
+
+  // Shuffle stage to ARA cuts
+  localparam int ShuffleCuts = $clog2(NrClusters);
+  typedef cluster_axi_req_t   [NrClusters-1:0] group_req_t;
+  typedef cluster_axi_resp_t  [NrClusters-1:0] group_resp_t;
+
+  group_req_t [ShuffleCuts:0] ara_axi_req_shuffle_cut;
+  group_resp_t [ShuffleCuts:0] ara_axi_resp_shuffle_cut;
+
   /////////
   // ARA //
   /////////
@@ -122,8 +138,8 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
         .num_clusters_i    (numClusters            ),
 
         // Interface with Ariane
-        .acc_req_i         (acc_req_cut [cluster]   ),
-        .acc_resp_o        (acc_resp_cut[cluster]   ),
+        .acc_req_i         (acc_req_fork[nlevels][cluster]    ),
+        .acc_resp_o        (acc_resp_fork[nlevels][cluster]   ),
 
         // AXI interface
         .axi_req_o         (ara_axi_req[cluster]   ),
@@ -133,22 +149,6 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
         .vew_aw_o        (vew_aw[cluster]         ),
 
         // Ring
-        // .ring_data_r_i       (ring_data_l        [cluster == NrClusters-1 ? 0 : cluster + 1]     ),
-        // .ring_data_r_valid_i (ring_data_l_valid  [cluster == NrClusters-1 ? 0 : cluster + 1]     ),
-        // .ring_data_r_ready_o (ring_data_l_ready  [cluster]                                       ), 
-
-        // .ring_data_l_i       (ring_data_r        [cluster == 0 ? NrClusters-1 : cluster - 1]     ),
-        // .ring_data_l_valid_i (ring_data_r_valid  [cluster == 0 ? NrClusters-1 : cluster - 1]     ),
-        // .ring_data_l_ready_o (ring_data_r_ready  [cluster]                                       ), 
-
-        // .ring_data_r_o       (ring_data_r        [cluster]                                       ),
-        // .ring_data_r_valid_o (ring_data_r_valid  [cluster]                                       ),
-        // .ring_data_r_ready_i (ring_data_r_ready  [cluster == NrClusters-1 ? 0 : cluster + 1]     ), 
-
-        // .ring_data_l_o       (ring_data_l        [cluster]                                       ),
-        // .ring_data_l_valid_o (ring_data_l_valid  [cluster]                                       ),
-        // .ring_data_l_ready_i (ring_data_l_ready  [cluster == 0 ? NrClusters-1 : cluster - 1]     )
-
         .ring_data_r_i       (ring_data_l_cut        [cluster == NrClusters-1 ? 0 : cluster + 1]     ),
         .ring_data_r_valid_i (ring_data_l_valid_cut  [cluster == NrClusters-1 ? 0 : cluster + 1]     ),
         .ring_data_r_ready_o (ring_data_l_ready  [cluster]                                           ), 
@@ -198,24 +198,30 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
         .data_o (ring_data_r_cut               [cluster]                                       )
       );
 
-      axi_cut #(
-        .ar_chan_t   (cluster_axi_ar_t     ),
-        .aw_chan_t   (cluster_axi_aw_t     ),
-        .b_chan_t    (cluster_axi_b_t      ),
-        .r_chan_t    (cluster_axi_r_t      ),
-        .w_chan_t    (cluster_axi_w_t      ),
-        .axi_req_t   (cluster_axi_req_t    ),
-        .axi_resp_t  (cluster_axi_resp_t   )
-      ) i_macro_axi_cut (
-        .clk_i       (clk_i),
-        .rst_ni      (rst_ni),
-        
-        .slv_req_i   (ara_axi_req[cluster]),
-        .slv_resp_o  (ara_axi_resp[cluster]),
+      // Cuts from ara macro to the shuffle stage
+      assign ara_axi_req_shuffle_cut[0][cluster] = ara_axi_req[cluster];
+      assign ara_axi_resp[cluster] = ara_axi_resp_shuffle_cut[0][cluster];
 
-        .mst_req_o   (ara_axi_req_cut[cluster]),
-        .mst_resp_i  (ara_axi_resp_cut[cluster])
-      );
+      for (genvar s=0; s < ShuffleCuts; s++) begin
+        axi_cut #(
+          .ar_chan_t   (cluster_axi_ar_t     ),
+          .aw_chan_t   (cluster_axi_aw_t     ),
+          .b_chan_t    (cluster_axi_b_t      ),
+          .r_chan_t    (cluster_axi_r_t      ),
+          .w_chan_t    (cluster_axi_w_t      ),
+          .axi_req_t   (cluster_axi_req_t    ),
+          .axi_resp_t  (cluster_axi_resp_t   )
+        ) i_macro_axi_cut (
+          .clk_i       (clk_i),
+          .rst_ni      (rst_ni),
+          
+          .slv_req_i   (ara_axi_req_shuffle_cut [s][cluster]),
+          .slv_resp_o  (ara_axi_resp_shuffle_cut[s][cluster]),
+
+          .mst_req_o   (ara_axi_req_shuffle_cut [s+1][cluster]),
+          .mst_resp_i  (ara_axi_resp_shuffle_cut[s+1][cluster])
+        );
+      end
   end
 
   //////////////////
@@ -223,6 +229,8 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
   //////////////////
   
   // Shuffle stage
+  assign ara_axi_req_cut = ara_axi_req_shuffle_cut[ShuffleCuts];
+  assign ara_axi_resp_shuffle_cut[ShuffleCuts] = ara_axi_resp_cut;
   shuffle_stage #(
     .NrLanes              (NrLanes              ),
     .NrClusters           (NrClusters           ),
@@ -365,49 +373,25 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
   // Need to distribut a CVA6 request to all clusters
   // Should happen only when all clusters are ready to receive the request
   // This is implemented by using a stream fork module
-  logic [NrClusters-1:0] acc_req_ready, acc_req_valid;
-  logic acc_req_ready_o, acc_req_valid_i; 
 
-  stream_fork #(
-    .N_OUP(NrClusters)
-    ) i_request_fork (
-    .clk_i  (clk_i),
-    .rst_ni (rst_ni),
-    // To CVA6
-    .valid_i(acc_req_valid_i),
-    .ready_o(acc_req_ready_o),
-    // To Clusters
-    .valid_o(acc_req_valid),
-    .ready_i(acc_req_ready)
-  );
+  assign acc_req_fork[0][0] = acc_req_i;
+  assign acc_resp_o = acc_resp_fork[0][0];
 
-  // Adding cuts to the CVA6 path to all clusters
-  for (genvar c=0; c<NrClusters; c++) begin 
-    cva6_cut # (
-      .NrCuts      (2             )
-    ) i_cva6_macro_cut (
-      .clk_i       (clk_i         ), 
-      .rst_ni      (rst_ni        ), 
+  for (genvar l=0; l < nlevels; l++) begin : p_level
+    for (genvar n=0; n < (1<<l); n++) begin : p_fork
 
-      .acc_req_i   (acc_req[c]       ),
-      .acc_resp_o  (acc_resp[c]      ),
+      // Req fork
+      req_fork_cut i_req_fork (
+        .clk_i (clk_i                          ),
+        .rst_ni(rst_ni                         ), 
+        
+        .req_i (acc_req_fork[l][n]         ),
+        .resp_o(acc_resp_fork[l][n]         ),
 
-      .acc_req_o   (acc_req_cut[c]   ),
-      .acc_resp_i  (acc_resp_cut[c]  )
-    );
-  end
-
-  always_comb begin
-    // Implementation of Request Synchronization
-    for (int c=0; c<NrClusters; c++) begin
-      acc_req[c] = acc_req_i;
-      acc_req[c].req_valid = acc_req_valid[c];
-      acc_req_ready[c] = acc_resp[c].req_ready;
+        .req_o (acc_req_fork[l+1][2*n +: 2]  ),
+        .resp_i(acc_resp_fork[l+1][2*n +: 2]  )
+      );
     end
-
-    acc_req_valid_i = acc_req_i.req_valid;
-    acc_resp_o = acc_resp[0];
-    acc_resp_o.req_ready = acc_req_ready_o;
   end
 
   if (NrClusters > MaxNrClusters)

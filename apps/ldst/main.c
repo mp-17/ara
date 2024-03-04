@@ -34,8 +34,8 @@ extern int vsize;
 
 // #define LDST_TEST  1
 // #define SLIDEDOWN_TEST 1
-#define SLIDEUP_TEST 1
-// #define REDUCTION_TEST 1
+// #define SLIDEUP_TEST 1
+#define REDUCTION_TEST 1
 
 #define FP64 1
 // #define FP32 1
@@ -177,7 +177,7 @@ int main() {
 
 	T *a_ = (T *) va;
 
-	float red;
+  T red;
 
 #ifdef FP64
 	asm volatile("vsetvli %0, %1, e64, m4, ta, ma" : "=r"(vl) : "r"(avl)); // FP64
