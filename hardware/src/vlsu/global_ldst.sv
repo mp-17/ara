@@ -297,7 +297,7 @@ always_comb begin : p_global_ldst
 
   for (int i=0; i<NrClusters; i++) begin
     w_cluster_valid[i] = axi_req_i[i].w_valid;
-    w_cluster_ready_d[i] = ~axi_req_i[i].w_valid;
+    w_cluster_ready_d[i] = w_cluster_ready_q[i] ? ~axi_req_i[i].w_valid : w_cluster_ready_q[i];
   end
 
   cluster_start_wr_d = cluster_start_wr_q;

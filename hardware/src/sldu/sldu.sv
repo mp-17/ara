@@ -691,6 +691,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
               // Unordered redsum instructions doesn't need in/out_pnt
               in_pnt_d  = '0;
               out_pnt_d = '0;
+              cluster_red_cnt_d = '0;
 
               // Initialize issue cnt. Pretend to move NrLanes 64-bit elements for (clog2(NrLanes) + 1) times.
               issue_cnt_d  = NrLanes * ($clog2(NrLanes) + num_clusters_i + 1 ) << EW64;
