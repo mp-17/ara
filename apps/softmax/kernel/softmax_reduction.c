@@ -1,7 +1,9 @@
 #include <stdint.h>
 #include <string.h>
+#include <riscv_vector.h>
+#include "../softmax/lib/exp.h"
 
-void softmax_vec_reduction(const double *i, const double *o, uint64_t channels,
+/*void softmax_vec_reduction(const double *i, const double *o, uint64_t channels,
                  uint64_t innerSize) {
 
   size_t avl = innerSize;
@@ -10,7 +12,7 @@ void softmax_vec_reduction(const double *i, const double *o, uint64_t channels,
   double *i_ = (double *) i;
   double *o_ = (double *) o;
   
-  float max, exp_sum;
+  double max, exp_sum;
 
   asm volatile("vsetvli %0, %1, e64, m1, ta, ma" : "=r"(vl) : "r"(avl)); // FP64
   asm volatile("vle64.v v21, (%0)"  ::"r"(i_));
@@ -157,6 +159,52 @@ void softmax_vec_reduction(const double *i, const double *o, uint64_t channels,
     asm volatile("vfdiv.vf v6, v5, %0" :: "f"(exp_sum));
     asm volatile("vse64.v v6, (%0)" :: "r"(o_));
     o_ += vl;
+  }
+
+}*/
+
+
+void softmax_vec_reduction(const double *i, const double *o, uint64_t channels,
+                 uint64_t innerSize) {
+
+  size_t avl = innerSize;
+  size_t vl;
+
+  double *i_ = (double *) i;
+  double *o_ = (double *) o;
+
+  vl = vsetvl_e64m1(avl); // For now assuming avl fits VRF, so vl = avl
+
+  vfloat64m1_t vec_zero = vfmv_v_f_f64m1(0, vl);
+  vfloat64m1_t vec_a = vle64_v_f64m1(i_, vl);
+
+  for (uint64_t c=0; c<channels; c+=1) {
+    // Find max
+    vfloat64m1_t vec_red_max;
+    vec_red_max = vfredmax_vs_f64m1_f64m1(vec_red_max, vec_a, vec_zero, vl);
+    double max = vfmv_f_s_f64m1_f64(vec_red_max);
+    vfloat64m1_t vec_max = vfmv_v_f_f64m1(max, vl);
+    vfloat64m1_t vec_b = vfsub_vv_f64m1(vec_a, vec_max, vl);
+    
+    // Find exp
+    vfloat64m1_t vec_c = __exp_1xf64(vec_b, vl);
+    
+    // Sum and divide
+    vfloat64m1_t vec_red_sum;
+    vec_red_sum = vfredusum_vs_f64m1_f64m1(vec_red_sum, vec_c, vec_zero, vl);
+    double sum = vfmv_f_s_f64m1_f64(vec_red_sum);
+    vfloat64m1_t vec_sum = vfmv_v_f_f64m1(sum, vl);
+    vfloat64m1_t vec_res = vfdiv_vv_f64m1(vec_c, vec_sum, vl);
+    
+    // Load next row
+    i_ += vl;
+    if (c+1 < channels) {
+      vec_a = vle64_v_f64m1(i_, vl);
+    }
+
+    vse64_v_f64m1(o_, vec_res, vl);
+    o_ += vl;
+
   }
 
 }
