@@ -14,8 +14,6 @@ void softmax_vec_reduction(const double *i, const double *o, uint64_t channels,
 
   asm volatile("vsetvli %0, %1, e64, m1, ta, ma" : "=r"(vl) : "r"(avl)); // FP64
   asm volatile("vle64.v v21, (%0)"  ::"r"(i_));
-  // asm volatile("vmv.s.x v22, zero");
-  // asm volatile("vfredmax.vs v23, v21, v22");    // v2 - max value of vector
 
   for (uint64_t c=0; c < channels; c+=2) {
     asm volatile("vmv.s.x v22, zero");
@@ -26,15 +24,11 @@ void softmax_vec_reduction(const double *i, const double *o, uint64_t channels,
 
     
     ///// Start of exp() compute
-
-    // Load vector
-    // asm volatile("vle64.v v30, (%0)" ::"r"(i));
     asm volatile("vfmv.v.f v31, %0" ::"f"(88.3762626647949) : "v31"); // exp_hi
     asm volatile("vfmin.vv     v30, v31, v30" ::: "v30");
     asm volatile("vfmv.v.f v1,  %0" ::"f"(-88.3762626647949) : "v1"); // exp_lo
     asm volatile("vfmax.vv     v30, v1, v30" ::: "v30");
-    asm volatile("vfmv.v.f v2,  %0" ::"f"(1.44269504088896341)
-        : "v2");                                // cephes_LOG2EF
+    asm volatile("vfmv.v.f v2,  %0" ::"f"(1.44269504088896341) : "v2"); // cephes_LOG2EF
     asm volatile("vfmv.v.f v13, %0" ::"f"(0.5) : "v13"); // fx
     asm volatile("vfmacc.vv    v13, v30, v2" ::: "v13");
     asm volatile("vfmv.v.f v3,  %0" ::"f"(0.693359375) : "v3"); // cephes_exp_C1
@@ -88,14 +82,12 @@ void softmax_vec_reduction(const double *i, const double *o, uint64_t channels,
     asm volatile("vsll.vv v18, v18, v19" ::: "v18");
     asm volatile("vfmul.vv v5, v5, v18" ::: "v5");
 
-    // Store
-    // asm volatile("vse64.v v5, (%0)" ::"r"(o));
-    // Unroll-2
-
     ///// End of exp() compute
+    
     asm volatile("vmv.s.x v4, zero");
     asm volatile("vfredusum.vs v4, v5, v4");
-
+    
+    // Unroll-2
     if ((c+1) < channels) {
       asm volatile("vfsub.vf v30, v21, %0"::"f"(max));
 
@@ -106,8 +98,6 @@ void softmax_vec_reduction(const double *i, const double *o, uint64_t channels,
       
       ///// Start of exp() compute
 
-      // Load vector
-      // asm volatile("vle64.v v30, (%0)" ::"r"(i));
       asm volatile("vfmv.v.f v31, %0" ::"f"(88.3762626647949) : "v31"); // exp_hi
       asm volatile("vfmin.vv     v30, v31, v30" ::: "v30");
       asm volatile("vfmv.v.f v1,  %0" ::"f"(-88.3762626647949) : "v1"); // exp_lo
@@ -161,21 +151,12 @@ void softmax_vec_reduction(const double *i, const double *o, uint64_t channels,
 
       if ((c+2) < channels) {
         asm volatile("vle64.v v21, (%0)"  ::"r"(i_));
-        // asm volatile("vmv.s.x v22, zero");
-        // asm volatile("vfredmax.vs v23, v21, v22");    // v2 - max value of vector
       }
-
-      asm volatile("vfmv.f.s %0, v4" : "=f"(exp_sum));
-      asm volatile("vfdiv.vf v6, v5, %0" :: "f"(exp_sum));
-      asm volatile("vse64.v v6, (%0)" :: "r"(o_));
-      o_ += vl;
     } 
-    else {
-      asm volatile("vfmv.f.s %0, v4" : "=f"(exp_sum));
-      asm volatile("vfdiv.vf v6, v5, %0" :: "f"(exp_sum));
-      asm volatile("vse64.v v6, (%0)" :: "r"(o_));
-      o_ += vl;
-    }
+    asm volatile("vfmv.f.s %0, v4" : "=f"(exp_sum));
+    asm volatile("vfdiv.vf v6, v5, %0" :: "f"(exp_sum));
+    asm volatile("vse64.v v6, (%0)" :: "r"(o_));
+    o_ += vl;
   }
 
 }
