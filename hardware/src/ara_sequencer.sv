@@ -303,8 +303,7 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
           // The target PE is ready, and we can handle another running vector instruction
           // Let instructions with priority pass be issued
           
-          // if (&vinsn_queue_issue && !stall_lanes_desynch && !vinsn_running_full) begin
-          if (vinsn_queue_issue[vfu(ara_req_i.op)] && !stall_lanes_desynch && !vinsn_running_full) begin
+          if (&vinsn_queue_issue && !stall_lanes_desynch && !vinsn_running_full) begin
             ///////////////
             //  Hazards  //
             ///////////////

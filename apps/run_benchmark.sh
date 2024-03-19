@@ -4,6 +4,7 @@ set -e
 app=$1
 dtype=$2
 
+make clean
 mkdir -p logs/$app
 
 for nr_clusters in 2 4 8
@@ -40,7 +41,11 @@ then
   r=$((len+2))
   args_app="256 $r"
   str_app=JACOBI2D
-else 
+elif [[ $app == "softmax" ]]
+then
+  args_app="64 $len"
+  str_app=SOFTMAX
+else
   echo "SPECIFY app and dtype as 2 arguments to script!"
 fi
 

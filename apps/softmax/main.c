@@ -43,10 +43,13 @@
 
 extern uint64_t channels;
 extern uint64_t innerSize;
-extern float i[] __attribute__((aligned(4 * NR_LANES)));
-extern float buf[] __attribute__((aligned(4 * NR_LANES)));
-extern float o_s[] __attribute__((aligned(4 * NR_LANES)));
-extern float o_v[] __attribute__((aligned(4 * NR_LANES)));
+#define T double
+
+extern T i[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));
+extern T buf[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));
+extern T o_s[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));
+extern T o_v[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));
+extern T o_g[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS)));
 
 int main() {
   printf("\n");
@@ -61,17 +64,18 @@ int main() {
   int64_t runtime;
   int error = 0;
 
-  printf("Scalar Softmax...\n");
+  /*printf("Scalar Softmax...\n");
   start_timer();
   softmax(i, o_s, buf, channels, innerSize);
   stop_timer();
 
   runtime = get_timer();
-  printf("The scalar SOFTMAX execution took %d cycles.\n", runtime);
+  printf("The scalar SOFTMAX execution took %d cycles.\n", runtime);*/
 
   printf("Vector Softmax...\n");
   start_timer();
-  softmax_vec(i, o_v, channels, innerSize);
+  // softmax_vec(i, o_v, channels, innerSize);
+  softmax_vec_reduction(i, o_v, channels, innerSize);
   stop_timer();
 
   runtime = get_timer();
@@ -79,20 +83,19 @@ int main() {
 
 #ifdef PRINT_RESULTS
   for (uint64_t k = 0; k < channels * innerSize; ++k) {
-    printf("%lu) Vector, Scalar: %x, %x\n", k, *((uint32_t *)&(o_v[k])),
-           *((uint32_t *)&(o_s[k])));
+    printf("%lu) Vector, Scalar: %lf, %lf\n", k, o_v[k], o_g[k]);
   }
 #endif
 
 #ifdef CHECK
   for (uint64_t k = 0; k < channels * innerSize; ++k) {
 #ifdef SANITY_CHECK
-    if (o_s[k] != o_v[k]) {
+    if (o_g[k] != o_v[k]) {
 #else
-    if (!similarity_check(o_s[k], o_v[k], THRESHOLD)) {
+    if (!similarity_check(o_g[k], o_v[k], THRESHOLD)) {
 #endif
       error = 1;
-      printf("Error at index %d. %f != %f\n", k, o_v[k], o_s[k]);
+      printf("Error at index %d. %lf != %lf\n", k, o_v[k], o_g[k]);
     }
   }
   if (!error)
