@@ -77,8 +77,8 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
   cluster_axi_req_t      [NrClusters-1:0] ara_axi_req, ara_axi_req_cut, ldst_axi_req, ldst_axi_req_cut;
   cluster_axi_resp_t     [NrClusters-1:0] ara_axi_resp, ara_axi_resp_cut, ldst_axi_resp, ldst_axi_resp_cut;
 
-  axi_req_t  axi_req_cut, axi_req_ldst, axi_req_align;
-  axi_resp_t axi_resp_cut, axi_resp_ldst, axi_resp_align;
+  axi_req_t  axi_req_cut, axi_req_ldst, axi_req_align, axi_req_align_o;
+  axi_resp_t axi_resp_cut, axi_resp_ldst, axi_resp_align, axi_resp_align_i;
 
   vew_e [NrClusters-1:0] vew_ar, vew_aw;
 
@@ -166,38 +166,6 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
         .ring_data_l_ready_i (ring_data_l_ready_cut  [cluster == 0 ? NrClusters-1 : cluster - 1]     )
       );
 
-      // Cuts on the ring interface
-      // To meet timing at the top level
-      spill_register #(
-        .T(elen_t)
-      ) i_ring_macro_spill_left (
-        .clk_i  (clk_i                        ),
-        .rst_ni (rst_ni                       ),
-        
-        .valid_i(ring_data_l_valid         [cluster]                                     ),
-        .ready_o(ring_data_l_ready_cut     [cluster == 0 ? NrClusters-1 : cluster - 1]   ),
-        .data_i (ring_data_l               [cluster]                                     ),
-
-        .valid_o(ring_data_l_valid_cut     [cluster]   ),
-        .ready_i(ring_data_l_ready         [cluster == 0 ? NrClusters-1 : cluster - 1]    ),
-        .data_o (ring_data_l_cut           [cluster]   )
-      );
-
-      spill_register #(
-        .T(elen_t)
-      ) i_ring_macro_spill_right (
-        .clk_i  (clk_i                        ),
-        .rst_ni (rst_ni                       ),
-        
-        .valid_i(ring_data_r_valid     [cluster]                                     ),
-        .ready_o(ring_data_r_ready     [cluster == NrClusters-1 ? 0 : cluster + 1]   ),
-        .data_i (ring_data_r           [cluster]                                     ),
-        
-        .valid_o(ring_data_r_valid_cut         [cluster]                                       ),
-        .ready_i(ring_data_r_ready_cut         [cluster == NrClusters-1 ? 0 : cluster + 1]     ),
-        .data_o (ring_data_r_cut               [cluster]                                       )
-      );
-
       // Cuts from ara macro to the shuffle stage
       assign ara_axi_req_shuffle_cut[0][cluster] = ara_axi_req[cluster];
       assign ara_axi_resp[cluster] = ara_axi_resp_shuffle_cut[0][cluster];
@@ -223,6 +191,103 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
         );
       end
   end
+  
+  `ifdef ADD_RING_LATENCY
+
+    typedef remote_data_t [`RING_LATENCY : 0] ring_cut_data_t; 
+    ring_cut_data_t [NrClusters-1 : 0] data_l_cut, data_r_cut;
+    typedef logic [`RING_LATENCY:0] ring_bit_t; 
+    ring_bit_t [NrClusters-1:0] data_l_valid_cut, data_l_ready_cut, data_r_valid_cut, data_r_ready_cut; 
+        
+    for (genvar cluster=0; cluster < NrClusters; cluster++) begin
+      for (genvar i=0; i < `RING_LATENCY; i++) begin : p_ring_cut
+          spill_register #(
+            .T(elen_t)
+          ) i_ring_latency_left (
+            .clk_i  (clk_i                      ),
+            .rst_ni (rst_ni                     ),
+            
+            .valid_i(data_l_valid_cut     [cluster][i]   ),
+            .ready_o(data_l_ready_cut     [cluster][i]   ),
+            .data_i (data_l_cut           [cluster][i]   ),
+
+            .valid_o(data_l_valid_cut     [cluster][i+1] ),
+            .ready_i(data_l_ready_cut     [cluster][i+1] ),
+            .data_o (data_l_cut           [cluster][i+1] )
+          );
+
+          spill_register #(
+            .T(elen_t)
+          ) i_ring_latency_right (
+            .clk_i  (clk_i                      ),
+            .rst_ni (rst_ni                     ),
+            
+            .valid_i(data_r_valid_cut     [cluster][i]   ),
+            .ready_o(data_r_ready_cut     [cluster][i]   ),
+            .data_i (data_r_cut           [cluster][i]   ),
+            
+            .valid_o(data_r_valid_cut     [cluster][i+1] ),
+            .ready_i(data_r_ready_cut     [cluster][i+1] ),
+            .data_o (data_r_cut           [cluster][i+1] )
+          );
+      end
+
+      assign data_l_valid_cut[cluster][0] = ring_data_l_valid[cluster];
+      assign ring_data_l_valid_cut[cluster] = data_l_valid_cut[cluster][`RING_LATENCY];
+
+      assign data_l_cut[cluster][0] = ring_data_l[cluster];
+      assign ring_data_l_cut[cluster] = data_l_cut[cluster][`RING_LATENCY];
+
+      assign ring_data_l_ready_cut[cluster == 0 ? NrClusters-1 : cluster - 1] = data_l_ready_cut[cluster][0];
+      assign data_l_ready_cut[cluster][`RING_LATENCY] = ring_data_l_ready[cluster == 0 ? NrClusters-1 : cluster - 1];
+
+      assign data_r_valid_cut[cluster][0] = ring_data_r_valid[cluster];
+      assign ring_data_r_valid_cut[cluster] = data_r_valid_cut[cluster][`RING_LATENCY];
+
+      assign data_r_cut[cluster][0] = ring_data_r[cluster];
+      assign ring_data_r_cut[cluster] = data_r_cut[cluster][`RING_LATENCY];
+
+      assign ring_data_r_ready[cluster == NrClusters-1 ? 0 : cluster + 1] = data_r_ready_cut[cluster][0];
+      assign data_r_ready_cut[cluster][`RING_LATENCY] = ring_data_r_ready_cut[cluster == NrClusters-1 ? 0 : cluster + 1];
+    end
+      
+  `else
+
+      for (genvar cluster=0; cluster < NrClusters; cluster++) begin
+        // Cuts on the ring interface
+        // To meet timing at the top level
+        spill_register #(
+          .T(elen_t)
+        ) i_ring_macro_spill_left (
+          .clk_i  (clk_i                        ),
+          .rst_ni (rst_ni                       ),
+          
+          .valid_i(ring_data_l_valid         [cluster]                                     ),
+          .ready_o(ring_data_l_ready_cut     [cluster == 0 ? NrClusters-1 : cluster - 1]   ),
+          .data_i (ring_data_l               [cluster]                                     ),
+
+          .valid_o(ring_data_l_valid_cut     [cluster]   ),
+          .ready_i(ring_data_l_ready         [cluster == 0 ? NrClusters-1 : cluster - 1]    ),
+          .data_o (ring_data_l_cut           [cluster]   )
+        );
+
+        spill_register #(
+          .T(elen_t)
+        ) i_ring_macro_spill_right (
+          .clk_i  (clk_i                        ),
+          .rst_ni (rst_ni                       ),
+          
+          .valid_i(ring_data_r_valid     [cluster]                                     ),
+          .ready_o(ring_data_r_ready     [cluster == NrClusters-1 ? 0 : cluster + 1]   ),
+          .data_i (ring_data_r           [cluster]                                     ),
+          
+          .valid_o(ring_data_r_valid_cut         [cluster]                                       ),
+          .ready_i(ring_data_r_ready_cut         [cluster == NrClusters-1 ? 0 : cluster + 1]     ),
+          .data_o (ring_data_r_cut               [cluster]                                       )
+        );
+      end
+      
+    `endif
 
   //////////////////
   // GLOBAL LD-ST //
@@ -365,17 +430,88 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
     // .slv_req_i   (axi_req_cut),
     // .slv_resp_o  (axi_resp_cut),
 
-    .mst_req_o   (axi_req_o),
-    .mst_resp_i  (axi_resp_i)
+    .mst_req_o   (axi_req_align_o),
+    .mst_resp_i  (axi_resp_align_i)
   );
-  
+
+  // For performance simulations to understand impact of memory access latency
+  `ifdef ADD_MEM_LATENCY
+    axi_req_t [`MEM_LATENCY:0] axi_req_latency;
+    axi_resp_t [`MEM_LATENCY:0] axi_resp_latency;
+    
+    for (genvar i=0; i < `MEM_LATENCY; i++) begin
+
+      axi_cut #(
+        .ar_chan_t   (axi_ar_t     ),
+        .aw_chan_t   (axi_aw_t     ),
+        .b_chan_t    (axi_b_t      ),
+        .r_chan_t    (axi_r_t      ),
+        .w_chan_t    (axi_w_t      ),
+        .axi_req_t   (axi_req_t    ),
+        .axi_resp_t  (axi_resp_t   )
+      ) i_mem_latency_axi_cut (
+        .clk_i       (clk_i),
+        .rst_ni      (rst_ni),
+        
+        .slv_req_i   (axi_req_latency[i]),
+        .slv_resp_o  (axi_resp_latency[i]),
+
+        .mst_req_o   (axi_req_latency[i+1]),
+        .mst_resp_i  (axi_resp_latency[i+1])
+      );
+    end
+
+    assign axi_req_latency[0] = axi_req_align_o;
+    assign axi_resp_latency[`MEM_LATENCY] = axi_resp_i;
+
+    assign axi_req_o = axi_req_latency[`MEM_LATENCY];
+    assign axi_resp_align_i = axi_resp_latency[0];
+
+  `else
+    assign axi_req_o = axi_req_align_o;
+    assign axi_resp_align_i = axi_resp_i;
+
+  `endif
+
+  //////////////////
+  ////// CVA6 ////// 
+  //////////////////
+
   // Synchronizing requests among clusters
-  // Need to distribut a CVA6 request to all clusters
+  // Need to distribute a CVA6 request to all clusters
   // Should happen only when all clusters are ready to receive the request
   // This is implemented by using a stream fork module
 
-  assign acc_req_fork[0][0] = acc_req_i;
-  assign acc_resp_o = acc_resp_fork[0][0];
+  // For performance simulations to understand impact of cva6 latency
+  `ifdef ADD_CVA6_LATENCY
+
+    accelerator_req_t req_cut_i, req_cut_o;
+    accelerator_resp_t resp_cut_i, resp_cut_o;
+
+    cva6_cut # (
+      .NrCuts      (`CVA6_LATENCY )
+    ) i_cva6_latency_cut (
+      .clk_i       (clk_i         ), 
+      .rst_ni      (rst_ni        ), 
+
+      .acc_req_i   (req_cut_i     ),
+      .acc_resp_o  (resp_cut_o    ),
+
+      .acc_req_o   (req_cut_o     ),
+      .acc_resp_i  (resp_cut_i    )
+    );
+
+    assign req_cut_i = acc_req_i; 
+    assign acc_resp_o = resp_cut_o;
+
+    assign acc_req_fork[0][0] = req_cut_o;
+    assign resp_cut_i = acc_resp_fork[0][0];
+  
+  `else 
+    assign acc_req_fork[0][0] = acc_req_i;
+    assign acc_resp_o = acc_resp_fork[0][0];
+
+  `endif
 
   for (genvar l=0; l < nlevels; l++) begin : p_level
     for (genvar n=0; n < (1<<l); n++) begin : p_fork

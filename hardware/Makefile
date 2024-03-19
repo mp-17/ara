@@ -112,6 +112,22 @@ ifneq ($(nr_clusters), 0)
 	bender_defs += --define USE_CLUSTER=1 --define NR_CLUSTERS=$(nr_clusters)
 endif
 
+# Latency arguments for perf simulations
+mem_latency ?= 0
+ifneq ($(mem_latency), 0)
+	bender_defs += --define ADD_MEM_LATENCY=1 --define MEM_LATENCY=$(mem_latency) 
+endif
+
+cva6_latency ?= 0
+ifneq ($(cva6_latency), 0)
+	bender_defs += --define ADD_CVA6_LATENCY=1 --define CVA6_LATENCY=$(cva6_latency) 
+endif
+
+ring_latency ?= 0
+ifneq ($(ring_latency), 0)
+	bender_defs += --define ADD_RING_LATENCY=1 --define RING_LATENCY=$(ring_latency) 
+endif
+
 # Targets
 bender_common_targs := -t rtl -t cv64a6_imafdcv_sv39 -t tech_cells_generic_include_tc_sram -t tech_cells_generic_include_tc_clk
 bender_targs_simc     := $(bender_common_targs) -t ara_test -t cva6_test
