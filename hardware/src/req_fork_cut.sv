@@ -48,19 +48,24 @@ module req_fork_cut import ara_pkg::*; import rvv_pkg::*; #(
   );
 
   for (genvar i=0; i<2; i++) begin
-    // Cut after a fork
-    cva6_cut # (
-      .NrCuts      (NrCuts           )
-    ) i_cva6_macro_cut (
-      .clk_i       (clk_i            ), 
-      .rst_ni      (rst_ni           ), 
+    if (NrCuts > 0) begin
+      // Cut after a fork
+      cva6_cut # (
+        .NrCuts      (NrCuts           )
+      ) i_cva6_macro_cut (
+        .clk_i       (clk_i            ), 
+        .rst_ni      (rst_ni           ), 
 
-      .acc_req_i   (req_cut_i[i]     ),
-      .acc_resp_o  (resp_cut_o[i]    ),
+        .acc_req_i   (req_cut_i[i]     ),
+        .acc_resp_o  (resp_cut_o[i]    ),
 
-      .acc_req_o   (req_cut_o[i]     ),
-      .acc_resp_i  (resp_cut_i[i]    )
-    );
+        .acc_req_o   (req_cut_o[i]     ),
+        .acc_resp_i  (resp_cut_i[i]    )
+      );
+    end else begin 
+      assign req_cut_o[i] = req_cut_i[i];
+      assign resp_cut_o[i] = resp_cut_i[i];
+    end
 
     assign req_o[i] = req_cut_o[i];
     assign resp_cut_i[i] = resp_i[i];

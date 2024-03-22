@@ -3,18 +3,22 @@ set -e
 
 app=$1
 dtype=$2
+latency=$3
+path=$4 # mem / cva6 / ring 
+
+logdir=logs
 
 make clean
 mkdir -p logs/$app
 
-for nr_clusters in 2 4 8
+for nr_clusters in 8 #2 4 8
 do
 for nr_lanes in 4
 do
 
 #Build hw
 cd ../hardware/
-make clean && make compile nr_clusters=${nr_clusters} config=${nr_lanes}_lanes
+make clean && make compile nr_clusters=${nr_clusters} config=${nr_lanes}_lanes ${path}_latency=$latency
 cd ../apps/
 
 for bytes_lane in 128 64 32 16 8
@@ -56,11 +60,13 @@ cp $app/data.S benchmarks/
 make bin/benchmarks ENV_DEFINES="-D$str_app -Ddtype=$dtype" nr_clusters=$nr_clusters config=${nr_lanes}_lanes old_data=1
 
 # Simulate
-cp bin/benchmarks bin/${app}_${nr_clusters}_${nr_lanes}_${bytes_lane}
-cp bin/benchmarks.dump bin/${app}_${nr_clusters}_${nr_lanes}_${bytes_lane}.dump
-touch logs/$app/${nr_lanes}L_${nr_clusters}C_${bytes_lane}B.log
+appname=${app}_${nr_clusters}_${nr_lanes}_${bytes_lane}
+cp bin/benchmarks bin/${appname}
+cp bin/benchmarks.dump bin/${appname}.dump
+
 cd ../hardware/
-make simc app=${app}_${nr_clusters}_${nr_lanes}_${bytes_lane} nr_clusters=$nr_clusters config=${nr_lanes}_lanes > ../apps/logs/${app}/${nr_lanes}L_${nr_clusters}C_${bytes_lane}B.log &
+logfile=../apps/${logdir}/${app}/${nr_lanes}L_${nr_clusters}C_${bytes_lane}B_${latency}${path}.log
+make simc app=${appname} nr_clusters=$nr_clusters config=${nr_lanes}_lanes > $logfile &
 cd ../apps
 
 done

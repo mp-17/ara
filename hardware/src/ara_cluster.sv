@@ -517,7 +517,9 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
     for (genvar n=0; n < (1<<l); n++) begin : p_fork
 
       // Req fork
-      req_fork_cut i_req_fork (
+      req_fork_cut #(
+        .NrCuts (1)
+      ) i_req_fork (
         .clk_i (clk_i                          ),
         .rst_ni(rst_ni                         ), 
         
