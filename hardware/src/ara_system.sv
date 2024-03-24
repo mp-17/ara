@@ -281,27 +281,27 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     .scan_enable_i   (scan_enable_i ),
     .scan_data_i     (1'b0          ),
     .scan_data_o     (/* Unused */  ),
-    .acc_req_i       (acc_req_cut   ),
-    .acc_resp_o      (acc_resp_cut  ),
+    .acc_req_i       (acc_req   ),
+    .acc_resp_o      (acc_resp  ),
     .axi_req_o       (ara_axi_req   ),
     .axi_resp_i      (ara_axi_resp  )
   );
 
 `endif
 
-  // Adding cuts to the CVA6 path to all clusters
-  cva6_cut # (
-    .NrCuts      (1             )
-  ) i_cva6_cut (
-    .clk_i       (clk_i         ), 
-    .rst_ni      (rst_ni        ), 
+  // // Adding cuts to the CVA6 path to all clusters
+  // cva6_cut # (
+  //   .NrCuts      (1             )
+  // ) i_cva6_cut (
+  //   .clk_i       (clk_i         ), 
+  //   .rst_ni      (rst_ni        ), 
 
-    .acc_req_i   (acc_req       ),
-    .acc_resp_o  (acc_resp      ),
+  //   .acc_req_i   (acc_req       ),
+  //   .acc_resp_o  (acc_resp      ),
 
-    .acc_req_o   (acc_req_cut   ),
-    .acc_resp_i  (acc_resp_cut  )
-  );
+  //   .acc_req_o   (acc_req_cut   ),
+  //   .acc_resp_i  (acc_resp_cut  )
+  // );
 
   axi_mux #(
     .SlvAxiIDWidth(AxiIdWidth       ),
@@ -330,11 +330,11 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     .test_i     (1'b0                                 ),
     .slv_reqs_i ({ara_axi_req_inval, ariane_axi_req}  ),
     .slv_resps_o({ara_axi_resp_inval, ariane_axi_resp}),
-    .mst_req_o  (axi_req_o_cut                            ),
-    .mst_resp_i (axi_resp_i_cut                           )
+    .mst_req_o  (axi_req_o                            ),
+    .mst_resp_i (axi_resp_i                           )
   );
   
-  axi_cut #(
+  /*axi_cut #(
     .ar_chan_t   (system_axi_ar_t     ),
     .aw_chan_t   (system_axi_aw_t     ),
     .b_chan_t    (system_axi_b_t      ),
@@ -351,6 +351,6 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
 
     .mst_req_o   (axi_req_o),
     .mst_resp_i  (axi_resp_i)
-  );
+  );*/
 
 endmodule : ara_system

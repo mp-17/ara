@@ -9,7 +9,7 @@ path=$4 # mem / cva6 / ring
 logdir=logs
 
 make clean
-mkdir -p logs/$app
+mkdir -p ${logdir}/$app
 
 for nr_clusters in 8 #2 4 8
 do
@@ -66,7 +66,7 @@ cp bin/benchmarks.dump bin/${appname}.dump
 
 cd ../hardware/
 logfile=../apps/${logdir}/${app}/${nr_lanes}L_${nr_clusters}C_${bytes_lane}B_${latency}${path}.log
-make simc app=${appname} nr_clusters=$nr_clusters config=${nr_lanes}_lanes > $logfile &
+make sim app=${appname} nr_clusters=$nr_clusters config=${nr_lanes}_lanes #> $logfile &
 cd ../apps
 
 done

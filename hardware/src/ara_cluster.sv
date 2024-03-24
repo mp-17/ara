@@ -518,7 +518,7 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
 
       // Req fork
       req_fork_cut #(
-        .NrCuts (1)
+        .NrCuts ((l==0 || l==2) ? 1 : 0)
       ) i_req_fork (
         .clk_i (clk_i                          ),
         .rst_ni(rst_ni                         ), 
