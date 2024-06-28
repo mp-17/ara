@@ -614,7 +614,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
               // Since this request goes outside of the lane, we might need to request an
               // extra operand regardless of whether it is valid in this lane or not.
               operand_request[MaskM].vl =
-              ((pe_req.vl - pe_req.stride + NrLanes - 1) / 8 / NrLanes)
+              ((pe_req.vl - pe_req.stride) / 8 / NrLanes)
               >> unsigned'(pe_req.vtype.vsew);
 
               if (((operand_request[MaskM].vl + pe_req.stride) <<
@@ -664,7 +664,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             if ((operand_request[AluA].vl << (unsigned'(EW64) - unsigned'(pe_req.eew_vs1))) * NrLanes !=
                 pe_req.vl) operand_request[AluA].vl += 1;
           end
-          operand_request_push[AluA] = pe_req.use_vs1 && !(pe_req.op inside {[VMFEQ:VMFGE]});
+          operand_request_push[AluA] = pe_req.use_vs1 && !(pe_req.op inside {[VMFEQ:VMFGE], VCPOP, VMSIF, VMSOF, VMSBF});
 
           operand_request[AluB] = '{
             id      : pe_req.id,
@@ -691,7 +691,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             if ((operand_request[AluB].vl << (unsigned'(EW64) - unsigned'(pe_req.eew_vs2))) * NrLanes !=
                 pe_req.vl) operand_request[AluB].vl += 1;
           end
-          operand_request_push[AluB] = pe_req.use_vs2 && !(pe_req.op inside {[VMFEQ:VMFGE]});
+          operand_request_push[AluB] = pe_req.use_vs2 && !(pe_req.op inside {[VMFEQ:VMFGE], VCPOP, VMSIF, VMSOF, VMSBF, VFIRST});
 
           operand_request[MulFPUA] = '{
             id      : pe_req.id,
