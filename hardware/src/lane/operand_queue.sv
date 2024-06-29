@@ -435,8 +435,8 @@ module operand_queue import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
 
       // Update the pointer to the input operand
       unique case (cmd.conv)
-        OpQueueConversionSExt2, OpQueueConversionZExt2, OpQueueConversionWideFP2, OpQueueAdjustFPCvt:
-          if (SupportIntExt2) select_d = select_q + 4;
+        OpQueueConversionSExt2, OpQueueConversionZExt2,
+        OpQueueConversionWideFP2, OpQueueAdjustFPCvt:   if (SupportIntExt2) select_d = select_q + 4;
         OpQueueConversionSExt4, OpQueueConversionZExt4: if (SupportIntExt4) select_d = select_q + 2;
         OpQueueConversionSExt8, OpQueueConversionZExt8: if (SupportIntExt8) select_d = select_q + 1;
         default:; // Do nothing.

@@ -44,6 +44,89 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     input  vlen_t                           addrgen_exception_vstart_i
   );
 
+  // Find the first lane that will fetch a VRF word with at least a potentially valid element inside
+  function automatic logic [$clog2(NrLanes)-1:0] first_active_lane(rvv_pkg::vew_e eew, vlen_t vstart);
+    // Start lane
+    // Number of elements in a single L*64-bit fetch: (NrLanes << (64 - pe_req_d.vtype.vsew)).
+    // vstart / (NrLanes << (64 - pe_req_d.vtype.vsew)) -> don't care.
+    // vstart % NrLanes -> our starting lane if:
+    // (vstart % (NrLanes << (64 - pe_req_d.vtype.vsew))) / NrLanes.
+    // Otherwise, the starting lane continues to be the 0th.
+
+    // Work on the correct number of bits
+    logic [$clog2(MaxNrLanes)-1:0] start_lane;
+
+    unique case (eew)
+      rvv_pkg::EW8: begin
+        start_lane = &vstart[$clog2(8*NrLanes)-1:$clog2(NrLanes)]
+                   ? vstart[$clog2(NrLanes)-1:0]
+                   : '0;
+      end
+      rvv_pkg::EW16: begin
+        start_lane = &vstart[$clog2(4*NrLanes)-1:$clog2(NrLanes)]
+                   ? vstart[$clog2(NrLanes)-1:0]
+                   : '0;
+      end
+      rvv_pkg::EW32: begin
+        start_lane = &vstart[$clog2(2*NrLanes)-1:$clog2(NrLanes)]
+                   ? vstart[$clog2(NrLanes)-1:0]
+                   : '0;
+      end
+      // EW64, default
+      default: begin
+        start_lane = vstart[$clog2(NrLanes)-1:0];
+      end
+    endcase
+
+    return start_lane;
+  endfunction
+
+  // Find the last lane that will fetch a VRF word with at least a potentially valid element inside
+  function automatic logic [$clog2(NrLanes)-1:0] last_active_lane(rvv_pkg::vew_e eew, vlen_t vl);
+    // End lane
+    // Number of elements in a single L*64-bit fetch: (NrLanes << (64 - vtype.vsew)).
+    // vl / (NrLanes << (64 - vtype.vsew)) -> don't care.
+    // (vl % NrLanes) - 1 -> our end lane if:
+    // (vl % (NrLanes << (64 - vtype.vsew)) - 1) / NrLanes.
+    // With the end lane we should subtract 1 since vl represents a number of
+    // elements and NOT an index.
+
+    // Work on the correct number of bits
+    logic [$clog2(NrLanes)-1:0] end_lane;
+
+    // Buffers to simplify the code reading
+    logic [$clog2(8*NrLanes)-1:0] buf8;
+    logic [$clog2(4*NrLanes)-1:0] buf16;
+    logic [$clog2(2*NrLanes)-1:0] buf32;
+
+    unique case (eew)
+      rvv_pkg::EW8: begin
+        buf8       = vl[$clog2(8*NrLanes)-1:0] - 1;
+        end_lane   = !(|buf8[$clog2(8*NrLanes)-1:$clog2(NrLanes)])
+                   ? vl[$clog2(NrLanes)-1:0] - 1
+                   : '1;
+      end
+      rvv_pkg::EW16: begin
+        buf16      = vl[$clog2(4*NrLanes)-1:0] - 1;
+        end_lane   = !(|buf16[$clog2(4*NrLanes)-1:$clog2(NrLanes)])
+                   ? vl[$clog2(NrLanes)-1:0] - 1
+                   : '1;
+      end
+      rvv_pkg::EW32: begin
+        buf32      = vl[$clog2(2*NrLanes)-1:0] - 1;
+        end_lane   = !(|buf32[$clog2(2*NrLanes)-1:$clog2(NrLanes)])
+                   ? vl[$clog2(NrLanes)-1:0] - 1
+                   : '1;
+      end
+      // EW64, default
+      default: begin
+        end_lane   = vl[$clog2(NrLanes)-1:0] - 1;
+      end
+    endcase
+
+    return end_lane;
+  endfunction
+
   ///////////////////////////////////
   //  Running vector instructions  //
   ///////////////////////////////////
@@ -147,65 +230,10 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   // that respectively will provide the first and last true element of
   // the computation.
   logic [$clog2(NrLanes)-1:0] start_lane, end_lane;
-  // Buffers to simplify the code reading
-  logic [$clog2(8*NrLanes)-1:0] buf8;
-  logic [$clog2(4*NrLanes)-1:0] buf16;
-  logic [$clog2(2*NrLanes)-1:0] buf32;
 
   always_comb begin
-    // start_lane and end_lane has default values in the unique case statement already
-    buf8       = '0;
-    buf16      = '0;
-    buf32      = '0;
-
-    // Start lane
-    // Number of elements in a single L*64-bit fetch: (NrLanes << (64 - pe_req_d.vtype.vsew)).
-    // vstart / (NrLanes << (64 - pe_req_d.vtype.vsew)) -> don't care.
-    // vstart % NrLanes -> our starting lane if:
-    // (vstart % (NrLanes << (64 - pe_req_d.vtype.vsew))) / NrLanes.
-    // Otherwise, the starting lane continues to be the 0th.
-
-    // End lane
-    // Number of elements in a single L*64-bit fetch: (NrLanes << (64 - pe_req_d.vtype.vsew)).
-    // vl / (NrLanes << (64 - pe_req_d.vtype.vsew)) -> don't care.
-    // (vl % NrLanes) - 1 -> our end lane if:
-    // (vl % (NrLanes << (64 - pe_req_d.vtype.vsew)) - 1) / NrLanes.
-    // With the end lane we should subtract 1 since vl represents a number of
-    // elements and NOT an index.
-    unique case (pe_req_d.vtype.vsew)
-      EW8: begin
-        start_lane = &pe_req_d.vstart[$clog2(8*NrLanes)-1:$clog2(NrLanes)]
-                   ? pe_req_d.vstart[$clog2(NrLanes)-1:0]
-                   : '0;
-        buf8       = pe_req_d.vl[$clog2(8*NrLanes)-1:0] - 1;
-        end_lane   = !(|buf8[$clog2(8*NrLanes)-1:$clog2(NrLanes)])
-                   ? pe_req_d.vl[$clog2(NrLanes)-1:0] - 1
-                   : '1;
-      end
-      EW16: begin
-        start_lane = &pe_req_d.vstart[$clog2(4*NrLanes)-1:$clog2(NrLanes)]
-                   ? pe_req_d.vstart[$clog2(NrLanes)-1:0]
-                   : '0;
-        buf16      = pe_req_d.vl[$clog2(4*NrLanes)-1:0] - 1;
-        end_lane   = !(|buf16[$clog2(4*NrLanes)-1:$clog2(NrLanes)])
-                   ? pe_req_d.vl[$clog2(NrLanes)-1:0] - 1
-                   : '1;
-      end
-      EW32: begin
-        start_lane = &pe_req_d.vstart[$clog2(2*NrLanes)-1:$clog2(NrLanes)]
-                   ? pe_req_d.vstart[$clog2(NrLanes)-1:0]
-                   : '0;
-        buf32      = pe_req_d.vl[$clog2(2*NrLanes)-1:0] - 1;
-        end_lane   = !(|buf32[$clog2(2*NrLanes)-1:$clog2(NrLanes)])
-                   ? pe_req_d.vl[$clog2(NrLanes)-1:0] - 1
-                   : '1;
-      end
-      // EW64, default
-      default: begin
-        start_lane = pe_req_d.vstart[$clog2(NrLanes)-1:0];
-        end_lane   = pe_req_d.vl[$clog2(NrLanes)-1:0] - 1;
-      end
-    endcase
+    start_lane = first_active_lane(pe_req_d.vtype.vsew, pe_req_d.vstart);
+    end_lane   = last_active_lane(pe_req_d.vtype.vsew, pe_req_d.vl);
   end
 
   /////////////////

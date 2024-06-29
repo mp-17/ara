@@ -299,59 +299,27 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
       operand_queue_cmd_o[requester_index]       = '0;
       operand_queue_cmd_valid_o[requester_index] = 1'b0;
 
-      // Prepare metadata upfront
-      // Length of vector body in elements, i.e., vl - vstart
-      vector_body_length = operand_request_i[requester_index].vl - operand_request_i[requester_index].vstart;
-
-      // Count the number of packets to fetch if we need to deshuffle.
-      // Slide operations use the vstart signal, which does NOT correspond to the architectural
-      // vstart, only when computing the fetch address. Ara supports architectural vstart > 0
-      // only for memory operations.
-      vl_byte     = operand_request_i[requester_index].vl     << operand_request_i[requester_index].vtype.vsew;
-      vstart_byte = operand_request_i[requester_index].is_slide
-                  ? 0
-                  : operand_request_i[requester_index].vstart << operand_request_i[requester_index].vtype.vsew;
-      vector_body_len_byte = vl_byte - vstart_byte + (vstart_byte % 8);
-      vector_body_len_packets = vector_body_len_byte >> operand_request_i[requester_index].eew;
-      if (vector_body_len_packets << operand_request_i[requester_index].eew < vector_body_len_byte)
-        vector_body_len_packets += 1;
-
-      // For memory operations, the number of elements initially refers to the new EEW (vsew here),
-      // but the requester_index must refer to the old EEW (eew here)
-      // This reasoning cannot be applied also to widening instructions, which modify vsew
-      // treating it as the EEW of vd
-      scaled_vector_body_length = (
-                                   vector_body_length
-                                    << operand_request_i[requester_index].vtype.vsew
-                                  ) >> operand_request_i[requester_index].eew;
-
-
       // Final computed length
-      effective_vector_body_length = ( operand_request_i[requester_index].scale_vl )
-                                      ? vector_body_len_packets
-                                      : vector_body_length;
+      vrf_words = ;
 
       // Address of the vstart element of the vector in the VRF
-      // This vstart is NOT the architectural one and was modified in the lane
-      // sequencer to provide the correct start address
-      vrf_addr = vaddr(operand_request_i[requester_index].vs, NrLanes)
-                  + (
-                      operand_request_i[requester_index].vstart
-                      >> (unsigned'(EW64) - unsigned'(operand_request_i[requester_index].eew))
-                    );
+      addr_offset = vslide ? vstart : vstart;
+      vrf_addr = vaddr(operand_request_i[requester_index].vs, NrLanes) + (vstart >> (EW64 - eew));
+
       // Init helper variables
       requester_metadata_tmp = '{
         id          : operand_request_i[requester_index].id,
-        addr        : vrf_addr,
-        len         : effective_vector_body_length,
+        addr        : operand_request_i[requester_index].vrf_addr,
+        vrf_words   : operand_request_i[requester_index].vrf_words,
         vew         : operand_request_i[requester_index].eew,
         hazard      : operand_request_i[requester_index].hazard,
         is_widening : operand_request_i[requester_index].cvt_resize == CVT_WIDE,
         default: '0
       };
+
       operand_queue_cmd_tmp = '{
         eew       : operand_request_i[requester_index].eew,
-        elem_count: effective_vector_body_length,
+        elem_count: operand_request_i[requester_index].vrf_words,
         conv      : operand_request_i[requester_index].conv,
         ntr_red   : operand_request_i[requester_index].cvt_resize,
         target_fu : operand_request_i[requester_index].target_fu,
@@ -362,7 +330,7 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
         IDLE: begin : state_q_IDLE
           // Accept a new instruction
           if (operand_request_valid_i[requester_index]) begin : op_req_valid
-            state_d                            = REQUESTING;
+            state_d = REQUESTING;
             // Acknowledge the request
             operand_request_ready_o[requester_index] = 1'b1;
 
@@ -370,25 +338,8 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
             operand_queue_cmd_o[requester_index] = operand_queue_cmd_tmp;
             operand_queue_cmd_valid_o[requester_index] = 1'b1;
 
-            // The length should be at least one after the rescaling
-            if (operand_queue_cmd_o[requester_index].elem_count == '0) begin : cmd_zero_rescaled_vl
-              operand_queue_cmd_o[requester_index].elem_count = 1;
-            end : cmd_zero_rescaled_vl
-
             // Store the request
             requester_metadata_d = requester_metadata_tmp;
-
-            // The length should be at least one after the rescaling
-            if (requester_metadata_d.len == '0) begin : req_zero_rescaled_vl
-              requester_metadata_d.len = 1;
-            end : req_zero_rescaled_vl
-
-
-            // Mute the requisition if the vl is zero
-            if (operand_request_i[requester_index].vl == '0) begin : zero_vl
-              state_d                              = IDLE;
-              operand_queue_cmd_valid_o[requester_index] = 1'b0;
-            end : zero_vl
           end : op_req_valid
         end : state_q_IDLE
 
@@ -416,14 +367,8 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
               // Bump the address pointer
               requester_metadata_d.addr = requester_metadata_q.addr + 1'b1;
 
-              // We read less than 64 bits worth of elements
-              num_bytes = ( 1 << ( unsigned'(EW64) - unsigned'(requester_metadata_q.vew) ) );
-              if (requester_metadata_q.len < num_bytes) begin
-                requester_metadata_d.len    = 0;
-              end
-              else begin
-                requester_metadata_d.len = requester_metadata_q.len - num_bytes;
-              end
+              // We read one vrf word
+              requester_metadata_d.len = requester_metadata_q.len - 1'b1;
             end : op_req_grant
 
             // Finished requesting all the elements
@@ -432,7 +377,7 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
 
               // Accept a new instruction
               if (operand_request_valid_i[requester_index]) begin : op_req_valid
-                state_d                            = REQUESTING;
+                state_d = REQUESTING;
                 // Acknowledge the request
                 operand_request_ready_o[requester_index] = 1'b1;
 
@@ -440,24 +385,8 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
                 operand_queue_cmd_o[requester_index] = operand_queue_cmd_tmp;
                 operand_queue_cmd_valid_o[requester_index] = 1'b1;
 
-                // The length should be at least one after the rescaling
-                if (operand_queue_cmd_o[requester_index].elem_count == '0) begin : cmd_zero_rescaled_vl
-                  operand_queue_cmd_o[requester_index].elem_count = 1;
-                end : cmd_zero_rescaled_vl
-
                 // Store the request
                 requester_metadata_d = requester_metadata_tmp;
-
-                // The length should be at least one after the rescaling
-                if (requester_metadata_d.len == '0) begin : req_zero_rescaled_vl
-                  requester_metadata_d.len = 1;
-                end : req_zero_rescaled_vl
-
-                // Mute the requisition if the vl is zero
-                if (operand_request_i[requester_index].vl == '0) begin : zero_vl
-                  state_d                              = IDLE;
-                  operand_queue_cmd_valid_o[requester_index] = 1'b0;
-                end : zero_vl
               end : op_req_valid
             end : req_finished
           end : op_queue_ready

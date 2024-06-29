@@ -21,8 +21,10 @@ package ara_pkg;
   localparam int unsigned VLEN  = `ifdef VLEN `VLEN `else 0 `endif;
   // Number of bytes in a vector register.
   localparam int unsigned VLENB = VLEN / 8;
+  // Maximum LMUL
+  localparam int unsigned MAX_LMUL = 8;
   // Maximum vector length (in elements).
-  localparam int unsigned MAXVL = VLEN; // SEW = EW8, LMUL = 8. VL = 8 * VLEN / 8 = VLEN.
+  localparam int unsigned MAXVL = VLEN * MAX_LMUL / 8; // SEW = EW8, LMUL = 8. VL = 8 * VLEN / 8 = VLEN.
 
   // Number of vector instructions that can run in parallel.
   localparam int unsigned NrVInsn = 8;
