@@ -299,17 +299,13 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
       operand_queue_cmd_o[requester_index]       = '0;
       operand_queue_cmd_valid_o[requester_index] = 1'b0;
 
-      // Final computed length
-      vrf_words = ;
-
       // Address of the vstart element of the vector in the VRF
-      addr_offset = vslide ? vstart : vstart;
-      vrf_addr = vaddr(operand_request_i[requester_index].vs, NrLanes) + (vstart >> (EW64 - eew));
+      vrf_addr = vaddr(operand_request_i[requester_index].vs, NrLanes) + (operand_request_i[requester_index].vstart >> (EW64 - operand_request_i[requester_index].eew));
 
       // Init helper variables
       requester_metadata_tmp = '{
         id          : operand_request_i[requester_index].id,
-        addr        : operand_request_i[requester_index].vrf_addr,
+        addr        : vrf_addr,
         vrf_words   : operand_request_i[requester_index].vrf_words,
         vew         : operand_request_i[requester_index].eew,
         hazard      : operand_request_i[requester_index].hazard,
@@ -319,7 +315,7 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
 
       operand_queue_cmd_tmp = '{
         eew       : operand_request_i[requester_index].eew,
-        elem_count: operand_request_i[requester_index].vrf_words,
+        elem_count: operand_request_i[requester_index].vl,
         conv      : operand_request_i[requester_index].conv,
         ntr_red   : operand_request_i[requester_index].cvt_resize,
         target_fu : operand_request_i[requester_index].target_fu,

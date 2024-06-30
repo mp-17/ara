@@ -427,6 +427,8 @@ package ara_pkg;
     vlen_t vstart;
     rvv_pkg::vtype_t vtype;
 
+    logic unbalanced;
+
     // Hazards
     logic [NrVInsn-1:0] hazard_vs1;
     logic [NrVInsn-1:0] hazard_vs2;
@@ -1018,6 +1020,7 @@ package ara_pkg;
 
     logic [4:0] vs; // Vector register operand
 
+    logic [$clog2(MAX_LMUL*VLEN/(MaxNrLanes*ELEN))-1:0] words_vreg; // number of VRF words to be fetched
     logic scale_vl; // Rescale vl taking into account the new and old EEW
 
     resize_e cvt_resize;    // Resizing of FP conversions
@@ -1073,6 +1076,7 @@ package ara_pkg;
     logic wide_fp_imm;            // Widen FP immediate (re-encoding)
     resize_e cvt_resize;    // Resizing of FP conversions
 
+    logic [$clog2(MAX_LMUL*VLEN/(MaxNrLanes*ELEN))-1:0] words_vreg; // number of VRF words to be fetched
     // Vector machine metadata
     vlen_t vl;
     vlen_t vstart;
