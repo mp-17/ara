@@ -376,10 +376,10 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
       if (vinsn_queue_d.issue_cnt != 0) begin : issue_cnt_bytes_update
         issue_cnt_bytes_d = ( vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vl -
                         vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vstart
-                      ) << unsigned'(vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vtype.vsew);
+                      ) << unsigned'(vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].eew_vd);
         // Prepare the VRF start pointer
         vrf_word_start_byte = vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vstart[$clog2(8*NrLanes)-1:0] <<
-          vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vtype.vsew;
+          vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].eew_vd;
         vrf_pnt_d           = {1'b0, vrf_word_start_byte[$clog2(8*NrLanes)-1:0]};
         vrf_cnt_d           = '0;
         // The first payload byte width for this vload
@@ -480,12 +480,12 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
 
       // Initialize counters
       if (vinsn_queue_d.issue_cnt == '0) begin : issue_cnt_bytes_init
-        issue_cnt_bytes_d = (pe_req_i.vl - pe_req_i.vstart) << unsigned'(pe_req_i.vtype.vsew);
+        issue_cnt_bytes_d = (pe_req_i.vl - pe_req_i.vstart) << unsigned'(pe_req_i.eew_vd);
       end : issue_cnt_bytes_init
 
       // Setup pointers and counters with vstart
       if (vinsn_queue_d.issue_cnt == '0) begin
-        vrf_word_start_byte = pe_req_i.vstart[$clog2(8*NrLanes)-1:0] << pe_req_i.vtype.vsew;
+        vrf_word_start_byte = pe_req_i.vstart[$clog2(8*NrLanes)-1:0] << pe_req_i.eew_vd;
         vrf_pnt_d           = {1'b0, vrf_word_start_byte[$clog2(8*NrLanes)-1:0]};
         vrf_cnt_d           = '0;
         // The first payload byte width for this vload

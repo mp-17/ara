@@ -370,9 +370,9 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
         // Unmasked: reshuffle everything
         ara_req_d.vm            = 1'b1;
         // Shuffle the whole reg (vl refers to current vsew)
-        ara_req_d.vtype.vsew    = eew_new_buffer_q;
+        ara_req_d.eew_vd        = eew_new_buffer_q;
         // Always reshuffle one vreg at a time
-        ara_req_d.vl            = VLENB >> ara_req_d.vtype.vsew;
+        ara_req_d.vl            = VLENB >> ara_req_d.eew_vd;
         // Vl refers to current system vsew but operand requesters
         // will fetch from a register with a different eew
         ara_req_d.scale_vl      = 1'b1;
@@ -664,7 +664,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     // to avoid unnecessary reshuffles
                     if (insn.varith_type.vm) begin
                       ara_req_d.eew_vs1    = eew_q[ara_req_d.vs1];
-                      ara_req_d.vtype.vsew = eew_q[ara_req_d.vs1];
+                      ara_req_d.eew_vd     = eew_q[ara_req_d.vs1];
                       ara_req_d.vl         = (csr_vl_q << csr_vtype_q.vsew[1:0]) >> ara_req_d.eew_vs1[1:0];
                     end
                   end
@@ -728,7 +728,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.op = ara_pkg::VWREDSUMU;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
                     ara_req_d.eew_vs1        = csr_vtype_q.vsew.next();
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueReductionZExt;
                     ara_req_d.conversion_vs2 = OpQueueConversionZExt2;
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -737,7 +737,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.op = ara_pkg::VWREDSUM;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
                     ara_req_d.eew_vs1        = csr_vtype_q.vsew.next();
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueReductionZExt;
                     ara_req_d.conversion_vs2 = OpQueueConversionSExt2;
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -791,7 +791,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b001110: begin
                     ara_req_d.op            = ara_pkg::VSLIDEUP;
                     ara_req_d.stride        = acc_req_i.rs1;
-                    ara_req_d.eew_vs2       = csr_vtype_q.vsew;
                     // Encode vslideup/vslide1up on the use_scalar_op field
                     ara_req_d.use_scalar_op = 1'b0;
                     // Vl refers to current system vsew, but operand requesters
@@ -805,7 +804,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b001111: begin
                     ara_req_d.op            = ara_pkg::VSLIDEDOWN;
                     ara_req_d.stride        = acc_req_i.rs1;
-                    ara_req_d.eew_vs2       = csr_vtype_q.vsew;
                     // Encode vslidedown/vslide1down on the use_scalar_op field
                     ara_req_d.use_scalar_op = 1'b0;
                     // Request will need reshuffling
@@ -999,7 +997,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b001110: begin
                     ara_req_d.op            = ara_pkg::VSLIDEUP;
                     ara_req_d.stride        = {{ELEN{insn.varith_type.rs1[19]}}, insn.varith_type.rs1};
-                    ara_req_d.eew_vs2       = csr_vtype_q.vsew;
                     // Encode vslideup/vslide1up on the use_scalar_op field
                     ara_req_d.use_scalar_op = 1'b0;
                     // Request will need reshuffling
@@ -1011,7 +1008,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b001111: begin
                     ara_req_d.op            = ara_pkg::VSLIDEDOWN;
                     ara_req_d.stride        = {{ELEN{insn.varith_type.rs1[19]}}, insn.varith_type.rs1};
-                    ara_req_d.eew_vs2       = csr_vtype_q.vsew;
                     // Encode vslidedown/vslide1down on the use_scalar_op field
                     ara_req_d.use_scalar_op = 1'b0;
                     // Request will need reshuffling
@@ -1114,7 +1110,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.vs1           = insn.varith_type.rs2;
                     ara_req_d.eew_vs1       = eew_q[insn.varith_type.rs2];
                     // Copy the encoding information to the new register
-                    ara_req_d.vtype.vsew    = eew_q[insn.varith_type.rs2];
+                    ara_req_d.eew_vd        = eew_q[insn.varith_type.rs2];
                     ara_req_d.vl            = vlmax; // whole register move
                   end
                   6'b101000: ara_req_d.op = ara_pkg::VSRL;
@@ -1309,13 +1305,14 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b001011: ara_req_d.op = ara_pkg::VASUB;
                   6'b011000: begin
                     ara_req_d.op        = ara_pkg::VMANDNOT;
-                    // Prefer mask operation on EW8 encoding
+                    // Same encoding is needed for mask logical operations!
+                    // Prefer mask operations on EW8 encoding
                     // In mask operations, vs1, vs2, vd should
                     // have the same encoding.
                     ara_req_d.eew_vs1    = EW8;
                     ara_req_d.eew_vs2    = EW8;
                     ara_req_d.eew_vd_op  = EW8;
-                    ara_req_d.vtype.vsew = EW8;
+                    ara_req_d.eew_vd     = EW8;
                     ara_req_d.use_vd_op  = 1'b1;
                   end
                   6'b011001: begin
@@ -1323,7 +1320,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.eew_vs1    = EW8;
                     ara_req_d.eew_vs2    = EW8;
                     ara_req_d.eew_vd_op  = EW8;
-                    ara_req_d.vtype.vsew = EW8;
+                    ara_req_d.eew_vd     = EW8;
                     ara_req_d.use_vd_op  = 1'b1;
                   end
                   6'b011010: begin
@@ -1331,7 +1328,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.eew_vs1    = EW8;
                     ara_req_d.eew_vs2    = EW8;
                     ara_req_d.eew_vd_op  = EW8;
-                    ara_req_d.vtype.vsew = EW8;
+                    ara_req_d.eew_vd     = EW8;
                     ara_req_d.use_vd_op  = 1'b1;
                   end
                   6'b011011: begin
@@ -1339,7 +1336,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.eew_vs1    = EW8;
                     ara_req_d.eew_vs2    = EW8;
                     ara_req_d.eew_vd_op  = EW8;
-                    ara_req_d.vtype.vsew = EW8;
+                    ara_req_d.eew_vd     = EW8;
                     ara_req_d.use_vd_op  = 1'b1;
                   end
                   6'b011100: begin
@@ -1347,7 +1344,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.eew_vs1    = EW8;
                     ara_req_d.eew_vs2    = EW8;
                     ara_req_d.eew_vd_op  = EW8;
-                    ara_req_d.vtype.vsew = EW8;
+                    ara_req_d.eew_vd     = EW8;
                     ara_req_d.use_vd_op  = 1'b1;
                   end
                   6'b011101: begin
@@ -1355,7 +1352,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.eew_vs1    = EW8;
                     ara_req_d.eew_vs2    = EW8;
                     ara_req_d.eew_vd_op  = EW8;
-                    ara_req_d.vtype.vsew = EW8;
+                    ara_req_d.eew_vd     = EW8;
                     ara_req_d.use_vd_op  = 1'b1;
                   end
                   6'b011110: begin
@@ -1363,7 +1360,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.eew_vs1    = EW8;
                     ara_req_d.eew_vs2    = EW8;
                     ara_req_d.eew_vd_op  = EW8;
-                    ara_req_d.vtype.vsew = EW8;
+                    ara_req_d.eew_vd     = EW8;
                     ara_req_d.use_vd_op  = 1'b1;
                   end
                   6'b011111: begin
@@ -1371,7 +1368,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.eew_vs1    = EW8;
                     ara_req_d.eew_vs2    = EW8;
                     ara_req_d.eew_vd_op  = EW8;
-                    ara_req_d.vtype.vsew = EW8;
+                    ara_req_d.eew_vd     = EW8;
                     ara_req_d.use_vd_op  = 1'b1;
                   end
                   6'b010010: begin // VXUNARY0
@@ -1478,7 +1475,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b110000: begin // VWADDU
                     ara_req_d.op             = ara_pkg::VADD;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionZExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionZExt2;
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1486,7 +1483,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b110001: begin // VWADD
                     ara_req_d.op             = ara_pkg::VADD;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionSExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionSExt2;
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1494,7 +1491,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b110010: begin // VWSUBU
                     ara_req_d.op             = ara_pkg::VSUB;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionZExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionZExt2;
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1502,7 +1499,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b110011: begin // VWSUB
                     ara_req_d.op             = ara_pkg::VSUB;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionSExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionSExt2;
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1511,7 +1508,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.op             = ara_pkg::VADD;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
                     lmul_vs2                 = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionZExt2;
                     ara_req_d.eew_vs2        = csr_vtype_q.vsew.next();
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1520,7 +1517,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.op             = ara_pkg::VADD;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
                     lmul_vs2                 = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionSExt2;
                     ara_req_d.eew_vs2        = csr_vtype_q.vsew.next();
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1529,7 +1526,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.op             = ara_pkg::VSUB;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
                     lmul_vs2                 = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionZExt2;
                     ara_req_d.eew_vs2        = csr_vtype_q.vsew.next();
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1538,7 +1535,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.op             = ara_pkg::VSUB;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
                     lmul_vs2                 = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionSExt2;
                     ara_req_d.eew_vs2        = csr_vtype_q.vsew.next();
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1546,7 +1543,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b111000: begin // VWMULU
                     ara_req_d.op             = ara_pkg::VMUL;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionZExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionZExt2;
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1554,7 +1551,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b111010: begin // VWMULSU
                     ara_req_d.op             = ara_pkg::VMUL;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionZExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionSExt2;
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1562,7 +1559,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b111011: begin // VWMUL
                     ara_req_d.op             = ara_pkg::VMUL;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionSExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionSExt2;
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1571,7 +1568,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.op             = ara_pkg::VMACC;
                     ara_req_d.use_vd_op      = 1'b1;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionZExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionZExt2;
                     ara_req_d.eew_vd_op      = csr_vtype_q.vsew.next();
@@ -1581,7 +1578,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.op             = ara_pkg::VMACC;
                     ara_req_d.use_vd_op      = 1'b1;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionSExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionSExt2;
                     ara_req_d.eew_vd_op      = csr_vtype_q.vsew.next();
@@ -1591,7 +1588,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.op             = ara_pkg::VMACC;
                     ara_req_d.use_vd_op      = 1'b1;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionSExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionZExt2;
                     ara_req_d.eew_vd_op      = csr_vtype_q.vsew.next();
@@ -1625,7 +1622,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                 end
 
                 // Ara cannot support instructions who operates on more than 64 bits.
-                if (int'(ara_req_d.vtype.vsew) > int'(EW64)) illegal_insn = 1'b1;
+                if (int'(ara_req_d.eew_vd    ) > int'(EW64)) illegal_insn = 1'b1;
 
                 // Instruction is invalid if the vtype is invalid
                 if (csr_vtype_q.vill) illegal_insn = 1'b1;
@@ -1653,7 +1650,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b001110: begin // vslide1up
                     ara_req_d.op      = ara_pkg::VSLIDEUP;
                     ara_req_d.stride  = 1;
-                    ara_req_d.eew_vs2 = csr_vtype_q.vsew;
                     // Request will need reshuffling
                     ara_req_d.scale_vl = 1'b1;
                     // If stride > vl, the vslideup has no effects
@@ -1663,7 +1659,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b001111: begin // vslide1down
                     ara_req_d.op      = ara_pkg::VSLIDEDOWN;
                     ara_req_d.stride  = 1;
-                    ara_req_d.eew_vs2 = csr_vtype_q.vsew;
                     // Request will need reshuffling
                     ara_req_d.scale_vl = 1'b1;
                   end
@@ -1710,7 +1705,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b110000: begin // VWADDU
                     ara_req_d.op             = ara_pkg::VADD;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionZExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionZExt2;
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1718,7 +1713,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b110001: begin // VWADD
                     ara_req_d.op             = ara_pkg::VADD;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionSExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionSExt2;
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1726,7 +1721,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b110010: begin // VWSUBU
                     ara_req_d.op             = ara_pkg::VSUB;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionZExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionZExt2;
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1734,7 +1729,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b110011: begin // VWSUB
                     ara_req_d.op             = ara_pkg::VSUB;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionSExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionSExt2;
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1743,7 +1738,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.op             = ara_pkg::VADD;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
                     lmul_vs2                 = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionZExt2;
                     ara_req_d.eew_vs2        = csr_vtype_q.vsew.next();
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1752,7 +1747,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.op             = ara_pkg::VADD;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
                     lmul_vs2                 = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionSExt2;
                     ara_req_d.eew_vs2        = csr_vtype_q.vsew.next();
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1761,7 +1756,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.op             = ara_pkg::VSUB;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
                     lmul_vs2                 = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionZExt2;
                     ara_req_d.eew_vs2        = csr_vtype_q.vsew.next();
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1770,7 +1765,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.op             = ara_pkg::VSUB;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
                     lmul_vs2                 = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionSExt2;
                     ara_req_d.eew_vs2        = csr_vtype_q.vsew.next();
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1778,7 +1773,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b111000: begin // VWMULU
                     ara_req_d.op             = ara_pkg::VMUL;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionZExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionZExt2;
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1786,7 +1781,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b111010: begin // VWMULSU
                     ara_req_d.op             = ara_pkg::VMUL;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionZExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionSExt2;
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1794,7 +1789,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b111011: begin // VWMUL
                     ara_req_d.op             = ara_pkg::VMUL;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionSExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionSExt2;
                     ara_req_d.cvt_resize     = CVT_WIDE;
@@ -1803,7 +1798,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.op             = ara_pkg::VMACC;
                     ara_req_d.use_vd_op      = 1'b1;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionZExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionZExt2;
                     ara_req_d.eew_vd_op      = csr_vtype_q.vsew.next();
@@ -1813,7 +1808,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.op             = ara_pkg::VMACC;
                     ara_req_d.use_vd_op      = 1'b1;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionSExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionSExt2;
                     ara_req_d.eew_vd_op      = csr_vtype_q.vsew.next();
@@ -1823,7 +1818,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.op             = ara_pkg::VMACC;
                     ara_req_d.use_vd_op      = 1'b1;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionZExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionSExt2;
                     ara_req_d.eew_vd_op      = csr_vtype_q.vsew.next();
@@ -1833,7 +1828,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.op             = ara_pkg::VMACC;
                     ara_req_d.use_vd_op      = 1'b1;
                     ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                    ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                    ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                     ara_req_d.conversion_vs1 = OpQueueConversionSExt2;
                     ara_req_d.conversion_vs2 = OpQueueConversionZExt2;
                     ara_req_d.eew_vd_op      = csr_vtype_q.vsew.next();
@@ -1861,7 +1856,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                 end
 
                 // Ara cannot support instructions who operates on more than 64 bits.
-                if (int'(ara_req_d.vtype.vsew) > int'(EW64)) illegal_insn = 1'b1;
+                if (int'(ara_req_d.eew_vd    ) > int'(EW64)) illegal_insn = 1'b1;
 
                 // Instruction is invalid if the vtype is invalid
                 if (csr_vtype_q.vill) illegal_insn = 1'b1;
@@ -1986,49 +1981,49 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                           ara_req_d.op             = VFCVTXUF;
                           ara_req_d.cvt_resize     = CVT_WIDE;
                           ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                          ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                          ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                           ara_req_d.conversion_vs2 = OpQueueAdjustFPCvt;
                         end
                         5'b01001: begin // Widening VFCVTXF
                           ara_req_d.op             = VFCVTXF;
                           ara_req_d.cvt_resize     = CVT_WIDE;
                           ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                          ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                          ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                           ara_req_d.conversion_vs2 = OpQueueAdjustFPCvt;
                         end
                         5'b01010: begin // Widening VFCVTFXU
                           ara_req_d.op             = VFCVTFXU;
                           ara_req_d.cvt_resize     = CVT_WIDE;
                           ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                          ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                          ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                           ara_req_d.conversion_vs2 = OpQueueAdjustFPCvt;
                         end
                         5'b01011: begin // Widening VFCVTFX
                           ara_req_d.op             = VFCVTFX;
                           ara_req_d.cvt_resize     = CVT_WIDE;
                           ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                          ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                          ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                           ara_req_d.conversion_vs2 = OpQueueAdjustFPCvt;
                         end
                         5'b01100: begin // Widening VFCVTFF
                           ara_req_d.op             = VFCVTFF;
                           ara_req_d.cvt_resize     = CVT_WIDE;
                           ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                          ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                          ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                           ara_req_d.conversion_vs2 = OpQueueAdjustFPCvt;
                         end
                         5'b01110: begin // Widening VFCVTRTZXUF
                           ara_req_d.op             = VFCVTRTZXUF;
                           ara_req_d.cvt_resize     = CVT_WIDE;
                           ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                          ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                          ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                           ara_req_d.conversion_vs2 = OpQueueAdjustFPCvt;
                         end
                         5'b01111: begin // Widening VFCVTRTZXF
                           ara_req_d.op             = VFCVTRTZXF;
                           ara_req_d.cvt_resize     = CVT_WIDE;
                           ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                          ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                          ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                           ara_req_d.conversion_vs2 = OpQueueAdjustFPCvt;
                         end
                         5'b10000: begin // Narrowing VFCVTXUF
@@ -2137,7 +2132,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.op             = ara_pkg::VFADD;
                       ara_req_d.swap_vs2_vd_op = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs1 = OpQueueConversionWideFP2;
                       ara_req_d.conversion_vs2 = OpQueueConversionWideFP2;
                     end
@@ -2145,7 +2140,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.op             = ara_pkg::VFWREDUSUM;
                       ara_req_d.swap_vs2_vd_op = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs1 = OpQueueReductionZExt;
                       ara_req_d.conversion_vs2 = OpQueueConversionWideFP2;
                       ara_req_d.eew_vs1        = csr_vtype_q.vsew.next();
@@ -2155,7 +2150,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.op             = ara_pkg::VFSUB;
                       ara_req_d.swap_vs2_vd_op = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs1 = OpQueueConversionWideFP2;
                       ara_req_d.conversion_vs2 = OpQueueConversionWideFP2;
                     end
@@ -2163,7 +2158,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.op             = ara_pkg::VFWREDOSUM;
                       ara_req_d.swap_vs2_vd_op = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs1 = OpQueueReductionZExt;
                       ara_req_d.conversion_vs2 = OpQueueConversionWideFP2;
                       ara_req_d.eew_vs1        = csr_vtype_q.vsew.next();
@@ -2174,7 +2169,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.swap_vs2_vd_op = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
                       lmul_vs2                 = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.eew_vs2        = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs1 = OpQueueConversionWideFP2;
                     end
@@ -2183,14 +2178,14 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.swap_vs2_vd_op = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
                       lmul_vs2                 = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.eew_vs2        = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs1 = OpQueueConversionWideFP2;
                     end
                     6'b111000: begin // VFWMUL
                       ara_req_d.op             = ara_pkg::VFMUL;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs1 = OpQueueConversionWideFP2;
                       ara_req_d.conversion_vs2 = OpQueueConversionWideFP2;
                     end
@@ -2198,7 +2193,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.op             = ara_pkg::VFMACC;
                       ara_req_d.use_vd_op      = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs1 = OpQueueConversionWideFP2;
                       ara_req_d.conversion_vs2 = OpQueueConversionWideFP2;
                       ara_req_d.eew_vd_op      = csr_vtype_q.vsew.next();
@@ -2207,7 +2202,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.op             = ara_pkg::VFNMACC;
                       ara_req_d.use_vd_op      = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs1 = OpQueueConversionWideFP2;
                       ara_req_d.conversion_vs2 = OpQueueConversionWideFP2;
                       ara_req_d.eew_vd_op      = csr_vtype_q.vsew.next();
@@ -2216,7 +2211,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.op             = ara_pkg::VFMSAC;
                       ara_req_d.use_vd_op      = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs1 = OpQueueConversionWideFP2;
                       ara_req_d.conversion_vs2 = OpQueueConversionWideFP2;
                       ara_req_d.eew_vd_op      = csr_vtype_q.vsew.next();
@@ -2225,7 +2220,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.op             = ara_pkg::VFNMSAC;
                       ara_req_d.use_vd_op      = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs1 = OpQueueConversionWideFP2;
                       ara_req_d.conversion_vs2 = OpQueueConversionWideFP2;
                       ara_req_d.eew_vd_op      = csr_vtype_q.vsew.next();
@@ -2265,20 +2260,20 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   // Ara can support 16-bit float, 32-bit float, 64-bit float.
                   // Ara cannot support instructions who operates on more than 64 bits.
                   unique case (FPUSupport)
-                    FPUSupportHalfSingleDouble: if (int'(ara_req_d.vtype.vsew) < int'(EW16) ||
-                          int'(ara_req_d.vtype.vsew) > int'(EW64) || int'(ara_req_d.eew_vs2) > int'(EW64))
+                    FPUSupportHalfSingleDouble: if (int'(ara_req_d.eew_vd    ) < int'(EW16) ||
+                          int'(ara_req_d.eew_vd    ) > int'(EW64) || int'(ara_req_d.eew_vs2) > int'(EW64))
                           illegal_insn = 1'b1;
-                    FPUSupportHalfSingle: if (int'(ara_req_d.vtype.vsew) < int'(EW16) ||
-                          int'(ara_req_d.vtype.vsew) > int'(EW32) || int'(ara_req_d.eew_vs2) > int'(EW32))
+                    FPUSupportHalfSingle: if (int'(ara_req_d.eew_vd    ) < int'(EW16) ||
+                          int'(ara_req_d.eew_vd    ) > int'(EW32) || int'(ara_req_d.eew_vs2) > int'(EW32))
                           illegal_insn = 1'b1;
-                    FPUSupportSingleDouble: if (int'(ara_req_d.vtype.vsew) < int'(EW32) ||
-                          int'(ara_req_d.vtype.vsew) > int'(EW64) || int'(ara_req_d.eew_vs2) > int'(EW64))
+                    FPUSupportSingleDouble: if (int'(ara_req_d.eew_vd    ) < int'(EW32) ||
+                          int'(ara_req_d.eew_vd    ) > int'(EW64) || int'(ara_req_d.eew_vs2) > int'(EW64))
                           illegal_insn = 1'b1;
-                    FPUSupportHalf: if (int'(ara_req_d.vtype.vsew) != int'(EW16) || int'(ara_req_d.eew_vs2) > int'(EW16))
+                    FPUSupportHalf: if (int'(ara_req_d.eew_vd    ) != int'(EW16) || int'(ara_req_d.eew_vs2) > int'(EW16))
                           illegal_insn = 1'b1;
-                    FPUSupportSingle: if (int'(ara_req_d.vtype.vsew) != int'(EW32) || int'(ara_req_d.eew_vs2) > int'(EW32))
+                    FPUSupportSingle: if (int'(ara_req_d.eew_vd    ) != int'(EW32) || int'(ara_req_d.eew_vs2) > int'(EW32))
                         illegal_insn = 1'b1;
-                    FPUSupportDouble: if (int'(ara_req_d.vtype.vsew) != int'(EW64) || int'(ara_req_d.eew_vs2) > int'(EW64))
+                    FPUSupportDouble: if (int'(ara_req_d.eew_vd    ) != int'(EW64) || int'(ara_req_d.eew_vs2) > int'(EW64))
                         illegal_insn = 1'b1;
                     default: illegal_insn = 1'b1; // Unsupported configuration
                   endcase
@@ -2323,7 +2318,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     6'b001110: begin // vfslide1up
                       ara_req_d.op     = ara_pkg::VSLIDEUP;
                       ara_req_d.stride = 1;
-                    ara_req_d.eew_vs2  = csr_vtype_q.vsew;
                     // Request will need reshuffling
                     ara_req_d.scale_vl = 1'b1;
                     // If stride > vl, the vslideup has no effects
@@ -2333,7 +2327,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     6'b001111: begin // vfslide1down
                       ara_req_d.op     = ara_pkg::VSLIDEDOWN;
                       ara_req_d.stride = 1;
-                    ara_req_d.eew_vs2  = csr_vtype_q.vsew;
                     // Request will need reshuffling
                     ara_req_d.scale_vl = 1'b1;
                     end
@@ -2403,7 +2396,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.op             = ara_pkg::VFADD;
                       ara_req_d.swap_vs2_vd_op = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs2 = OpQueueConversionWideFP2;
                       ara_req_d.wide_fp_imm    = 1'b1;
                     end
@@ -2411,7 +2404,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.op             = ara_pkg::VFSUB;
                       ara_req_d.swap_vs2_vd_op = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs2 = OpQueueConversionWideFP2;
                       ara_req_d.wide_fp_imm    = 1'b1;
                     end
@@ -2420,7 +2413,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.swap_vs2_vd_op = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
                       lmul_vs2                 = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.eew_vs2        = csr_vtype_q.vsew.next();
                       ara_req_d.wide_fp_imm    = 1'b1;
                     end
@@ -2429,14 +2422,14 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.swap_vs2_vd_op = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
                       lmul_vs2                 = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.eew_vs2        = csr_vtype_q.vsew.next();
                       ara_req_d.wide_fp_imm    = 1'b1;
                     end
                     6'b111000: begin // VFWMUL
                       ara_req_d.op             = ara_pkg::VFMUL;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs2 = OpQueueConversionWideFP2;
                       ara_req_d.wide_fp_imm    = 1'b1;
                     end
@@ -2444,7 +2437,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.op             = ara_pkg::VFMACC;
                       ara_req_d.use_vd_op      = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs2 = OpQueueConversionWideFP2;
                       ara_req_d.wide_fp_imm    = 1'b1;
                       ara_req_d.eew_vd_op      = csr_vtype_q.vsew.next();
@@ -2453,7 +2446,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.op             = ara_pkg::VFNMACC;
                       ara_req_d.use_vd_op      = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs2 = OpQueueConversionWideFP2;
                       ara_req_d.wide_fp_imm    = 1'b1;
                       ara_req_d.eew_vd_op      = csr_vtype_q.vsew.next();
@@ -2462,7 +2455,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.op             = ara_pkg::VFMSAC;
                       ara_req_d.use_vd_op      = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs2 = OpQueueConversionWideFP2;
                       ara_req_d.wide_fp_imm    = 1'b1;
                       ara_req_d.eew_vd_op      = csr_vtype_q.vsew.next();
@@ -2471,7 +2464,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       ara_req_d.op             = ara_pkg::VFNMSAC;
                       ara_req_d.use_vd_op      = 1'b1;
                       ara_req_d.emul           = next_lmul(csr_vtype_q.vlmul);
-                      ara_req_d.vtype.vsew     = csr_vtype_q.vsew.next();
+                      ara_req_d.eew_vd         = csr_vtype_q.vsew.next();
                       ara_req_d.conversion_vs2 = OpQueueConversionWideFP2;
                       ara_req_d.wide_fp_imm    = 1'b1;
                       ara_req_d.eew_vd_op      = csr_vtype_q.vsew.next();
@@ -2508,16 +2501,16 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   // Ara can support 16-bit float, 32-bit float, 64-bit float.
                   // Ara cannot support instructions who operates on more than 64 bits.
                   unique case (FPUSupport)
-                    FPUSupportHalfSingleDouble: if (int'(ara_req_d.vtype.vsew) < int'(EW16) ||
-                          int'(ara_req_d.vtype.vsew) > int'(EW64)) illegal_insn = 1'b1;
-                    FPUSupportHalfSingle: if (int'(ara_req_d.vtype.vsew) < int'(EW16) ||
-                          int'(ara_req_d.vtype.vsew) > int'(EW32)) illegal_insn = 1'b1;
-                    FPUSupportSingleDouble: if (int'(ara_req_d.vtype.vsew) < int'(EW32) ||
-                          int'(ara_req_d.vtype.vsew) > int'(EW64)) illegal_insn = 1'b1;
-                    FPUSupportHalf: if (int'(ara_req_d.vtype.vsew) != int'(EW16)) illegal_insn = 1'b1;
-                    FPUSupportSingle: if (int'(ara_req_d.vtype.vsew) != int'(EW32))
+                    FPUSupportHalfSingleDouble: if (int'(ara_req_d.eew_vd    ) < int'(EW16) ||
+                          int'(ara_req_d.eew_vd    ) > int'(EW64)) illegal_insn = 1'b1;
+                    FPUSupportHalfSingle: if (int'(ara_req_d.eew_vd    ) < int'(EW16) ||
+                          int'(ara_req_d.eew_vd    ) > int'(EW32)) illegal_insn = 1'b1;
+                    FPUSupportSingleDouble: if (int'(ara_req_d.eew_vd    ) < int'(EW32) ||
+                          int'(ara_req_d.eew_vd    ) > int'(EW64)) illegal_insn = 1'b1;
+                    FPUSupportHalf: if (int'(ara_req_d.eew_vd    ) != int'(EW16)) illegal_insn = 1'b1;
+                    FPUSupportSingle: if (int'(ara_req_d.eew_vd    ) != int'(EW32))
                         illegal_insn = 1'b1;
-                    FPUSupportDouble: if (int'(ara_req_d.vtype.vsew) != int'(EW64))
+                    FPUSupportDouble: if (int'(ara_req_d.eew_vd    ) != int'(EW64))
                         illegal_insn = 1'b1;
                     default: illegal_insn = 1'b1; // Unsupported configuration
                   endcase
@@ -2551,37 +2544,38 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
             ara_req_valid_d     = 1'b1;
 
             // Decode the element width
-            // Indexed memory operations follow a different rule
+            // Indexed memory operations loads sew elements and the encoded width
+            // refers to the index vector.
             unique case ({insn.vmem_type.mew, insn.vmem_type.width})
               4'b0000: begin
                   if (insn.vmem_type.mop != 2'b01 && insn.vmem_type.mop != 2'b11) begin
-                    ara_req_d.vtype.vsew = EW8;
+                    ara_req_d.eew_vd     = EW8;
                   end else begin
-                    ara_req_d.vtype.vsew = csr_vtype_q.vsew;
+                    ara_req_d.eew_vd     = csr_vtype_q.vsew;
                     ara_req_d.eew_vs2    = EW8;
                   end
               end
               4'b0101: begin
                   if (insn.vmem_type.mop != 2'b01 && insn.vmem_type.mop != 2'b11) begin
-                    ara_req_d.vtype.vsew = EW16;
+                    ara_req_d.eew_vd     = EW16;
                   end else begin
-                    ara_req_d.vtype.vsew = csr_vtype_q.vsew;
+                    ara_req_d.eew_vd     = csr_vtype_q.vsew;
                     ara_req_d.eew_vs2    = EW16;
                   end
               end
               4'b0110: begin
                   if (insn.vmem_type.mop != 2'b01 && insn.vmem_type.mop != 2'b11) begin
-                    ara_req_d.vtype.vsew = EW32;
+                    ara_req_d.eew_vd     = EW32;
                   end else begin
-                    ara_req_d.vtype.vsew = csr_vtype_q.vsew;
+                    ara_req_d.eew_vd     = csr_vtype_q.vsew;
                     ara_req_d.eew_vs2    = EW32;
                   end
               end
               4'b0111: begin
                   if (insn.vmem_type.mop != 2'b01 && insn.vmem_type.mop != 2'b11) begin
-                    ara_req_d.vtype.vsew = EW64;
+                    ara_req_d.eew_vd     = EW64;
                   end else begin
-                    ara_req_d.vtype.vsew = csr_vtype_q.vsew;
+                    ara_req_d.eew_vd     = csr_vtype_q.vsew;
                     ara_req_d.eew_vs2    = EW64;
                   end
               end
@@ -2605,7 +2599,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   5'b01011: begin // Unit-strided, mask load, EEW=1
                     // We operate ceil(vl/8) bytes
                     ara_req_d.vl         = (csr_vl_q >> 3) + |csr_vl_q[2:0];
-                    ara_req_d.vtype.vsew = EW8;
+                    ara_req_d.eew_vd     = EW8;
                   end
                   5'b10000: begin // Unit-strided, fault-only first
                     // TODO: Not implemented
@@ -2632,21 +2626,21 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
 
             // For memory operations: EMUL = LMUL * (EEW / SEW)
             // EEW is encoded in the instruction
-            ara_req_d.emul = vlmul_e'(csr_vtype_q.vlmul + (ara_req_d.vtype.vsew - csr_vtype_q.vsew));
+            ara_req_d.emul = vlmul_e'(csr_vtype_q.vlmul + (ara_req_d.eew_vd - csr_vtype_q.vsew));
 
             // Exception if EMUL > 8 or < 1/8
             unique case ({csr_vtype_q.vlmul[2], ara_req_d.emul[2]})
               // The new emul is lower than the previous lmul
               2'b01: begin
                 // But the new eew is greater than vsew
-                if (signed'(ara_req_d.vtype.vsew - csr_vtype_q.vsew) > 0) begin
+                if (signed'(ara_req_d.eew_vd - csr_vtype_q.vsew) > 0) begin
                   illegal_insn_load     = 1'b1;
                 end
               end
               // The new emul is greater than the previous lmul
               2'b10: begin
                 // But the new eew is lower than vsew
-                if (signed'(ara_req_d.vtype.vsew - csr_vtype_q.vsew) < 0) begin
+                if (signed'(ara_req_d.eew_vd - csr_vtype_q.vsew) < 0) begin
                   illegal_insn_load     = 1'b1;
                 end
               end
@@ -2680,7 +2674,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
               ara_req_valid_d  = 1'b1;
 
               // Maximum vector length. VLMAX = nf * VLEN / EW8.
-              ara_req_d.vtype.vsew = EW8;
+              ara_req_d.eew_vd     = EW8;
               unique case (insn.vmem_type.nf)
                 3'd0: begin
                   ara_req_d.vl = VLENB << 0;
@@ -2723,7 +2717,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
           /////////////////////
 
           // Vector stores encode:
-          //  - The target EEW in ara_req_d.vtype.vsew
+          //  - The target EEW in ara_req_d.eew_vd
           //  - The EEW of the source register in ara_req_d.eew_vs1
           // The current vector length refers to the target EEW!
           // Vector stores never re-shuffle the source register!
@@ -2757,33 +2751,33 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
             unique case ({insn.vmem_type.mew, insn.vmem_type.width})
               4'b0000: begin
                   if (insn.vmem_type.mop != 2'b01 && insn.vmem_type.mop != 2'b11) begin
-                    ara_req_d.vtype.vsew = EW8; // ara_req_d.vtype.vsew is the target EEW!
+                    ara_req_d.eew_vd     = EW8; // ara_req_d.eew_vd is the target EEW!
                   end else begin
-                    ara_req_d.vtype.vsew = csr_vtype_q.vsew;
+                    ara_req_d.eew_vd     = csr_vtype_q.vsew;
                     ara_req_d.eew_vs2    = EW8;
                   end
               end
               4'b0101: begin
                   if (insn.vmem_type.mop != 2'b01 && insn.vmem_type.mop != 2'b11) begin
-                    ara_req_d.vtype.vsew = EW16;
+                    ara_req_d.eew_vd     = EW16;
                   end else begin
-                    ara_req_d.vtype.vsew = csr_vtype_q.vsew;
+                    ara_req_d.eew_vd     = csr_vtype_q.vsew;
                     ara_req_d.eew_vs2    = EW16;
                   end
               end
               4'b0110: begin
                   if (insn.vmem_type.mop != 2'b01 && insn.vmem_type.mop != 2'b11) begin
-                    ara_req_d.vtype.vsew = EW32;
+                    ara_req_d.eew_vd     = EW32;
                   end else begin
-                    ara_req_d.vtype.vsew = csr_vtype_q.vsew;
+                    ara_req_d.eew_vd     = csr_vtype_q.vsew;
                     ara_req_d.eew_vs2    = EW32;
                   end
               end
               4'b0111: begin
                   if (insn.vmem_type.mop != 2'b01 && insn.vmem_type.mop != 2'b11) begin
-                    ara_req_d.vtype.vsew = EW64;
+                    ara_req_d.eew_vd     = EW64;
                   end else begin
-                    ara_req_d.vtype.vsew = csr_vtype_q.vsew;
+                    ara_req_d.eew_vd     = csr_vtype_q.vsew;
                     ara_req_d.eew_vs2    = EW64;
                   end
               end
@@ -2804,7 +2798,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   5'b01011: begin // Unit-strided, mask store, EEW=1
                     // We operate ceil(vl/8) bytes
                     ara_req_d.vl         = (csr_vl_q >> 3) + |csr_vl_q[2:0];
-                    ara_req_d.vtype.vsew = EW8;
+                    ara_req_d.eew_vd     = EW8;
                   end
                   default: begin // Reserved
                     illegal_insn_store    = 1'b1;
@@ -2827,21 +2821,21 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
 
             // For memory operations: EMUL = LMUL * (EEW / SEW)
             // EEW is encoded in the instruction
-            ara_req_d.emul = vlmul_e'(csr_vtype_q.vlmul + (ara_req_d.vtype.vsew - csr_vtype_q.vsew));
+            ara_req_d.emul = vlmul_e'(csr_vtype_q.vlmul + (ara_req_d.eew_vd     - csr_vtype_q.vsew));
 
             // Exception if EMUL > 8 or < 1/8
             unique case ({csr_vtype_q.vlmul[2], ara_req_d.emul[2]})
               // The new emul is lower than the previous lmul
               2'b01: begin
                 // But the new eew is greater than vsew
-                if (signed'(ara_req_d.vtype.vsew - csr_vtype_q.vsew) > 0) begin
+                if (signed'(ara_req_d.eew_vd     - csr_vtype_q.vsew) > 0) begin
                   illegal_insn_store    = 1'b1;
                 end
               end
               // The new emul is greater than the previous lmul
               2'b10: begin
                 // But the new eew is lower than vsew
-                if (signed'(ara_req_d.vtype.vsew - csr_vtype_q.vsew) < 0) begin
+                if (signed'(ara_req_d.eew_vd     - csr_vtype_q.vsew) < 0) begin
                   illegal_insn_store    = 1'b1;
                 end
               end
@@ -2874,7 +2868,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
               illegal_insn_store    = 1'b0;
 
               // Maximum vector length. VLMAX = nf * VLEN / EW8.
-              ara_req_d.vtype.vsew = EW8;
+              ara_req_d.eew_vd     = EW8;
               unique case (insn.vmem_type.nf)
                 3'd0: begin
                   ara_req_d.vl = VLENB << 0;
@@ -2916,7 +2910,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                 state_d = WAIT_IDLE;
               end
             end
-            ara_req_d.eew_vs1 = ara_req_d.vtype.vsew; // This is the new vs1 EEW
+            ara_req_d.eew_vs1 = ara_req_d.eew_vd; // This is the new vs1 EEW
           end
 
           ////////////////////////////
@@ -3195,7 +3189,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
         // During a vstore, if vstart > 0, reshuffle immediately not to complicate operand fetch stage
         reshuffle_req_d = {ara_req_d.use_vs1 && (ara_req_d.eew_vs1    != eew_q[ara_req_d.vs1]) && eew_valid_q[ara_req_d.vs1] && (in_lane_op || (is_vstore && (csr_vstart_q != '0))),
                            ara_req_d.use_vs2 && (ara_req_d.eew_vs2    != eew_q[ara_req_d.vs2]) && eew_valid_q[ara_req_d.vs2] && in_lane_op,
-                           ara_req_d.use_vd  && (ara_req_d.vtype.vsew != eew_q[ara_req_d.vd ]) && eew_valid_q[ara_req_d.vd ] && csr_vl_q != ((VLENB << ara_req_d.emul[1:0]) >> ara_req_d.vtype.vsew)};
+                           ara_req_d.use_vd  && (ara_req_d.eew_vd     != eew_q[ara_req_d.vd ]) && eew_valid_q[ara_req_d.vd ] && csr_vl_q != ((VLENB << ara_req_d.emul[1:0]) >> ara_req_d.eew_vd    )};
         // Mask out requests if they refer to the same register!
         reshuffle_req_d &= {
           (insn.varith_type.rs1 != insn.varith_type.rs2) && (insn.varith_type.rs1 != insn.varith_type.rd),
@@ -3204,10 +3198,11 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
 
         // Prepare the information to reshuffle the vector registers during the next cycles
         // Reshuffle in the following order: vd, v2, v1. The order is arbitrary.
+        //
         unique casez (reshuffle_req_d)
           3'b??1: begin
             eew_old_buffer_d = eew_q[insn.vmem_type.rd];
-            eew_new_buffer_d = ara_req_d.vtype.vsew;
+            eew_new_buffer_d = ara_req_d.eew_vd;
             vs_buffer_d      = insn.varith_type.rd;
           end
           3'b?10: begin
@@ -3216,6 +3211,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
             vs_buffer_d      = insn.varith_type.rs2;
           end
           3'b100: begin
+            // vstore encodes vs3 (the source vreg, treated as vs1) in the rd instruction field.
             eew_old_buffer_d = is_vstore ? eew_q[insn.vmem_type.rd] : eew_q[insn.vmem_type.rs1];
             eew_new_buffer_d = ara_req_d.eew_vs1;
             vs_buffer_d      = is_vstore ? insn.vmem_type.rd : insn.varith_type.rs1;
@@ -3245,7 +3241,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
         // Save info for next reshuffles
         reshuffle_eew_vs1_d = ara_req_d.eew_vs1;
         reshuffle_eew_vs2_d = ara_req_d.eew_vs2;
-        reshuffle_eew_vd_d  = ara_req_d.vtype.vsew;
+        reshuffle_eew_vd_d  = ara_req_d.eew_vd;
 
         // Reshuffle
         state_d = RESHUFFLE;
@@ -3257,31 +3253,31 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
       unique case (ara_req_d.emul)
         LMUL_1: begin
           for (int i = 0; i < 1; i++) begin
-            eew_d[ara_req_d.vd + i]       = ara_req_d.vtype.vsew;
+            eew_d[ara_req_d.vd + i]       = ara_req_d.eew_vd;
             eew_valid_d[ara_req_d.vd + i] = 1'b1;
           end
         end
         LMUL_2: begin
           for (int i = 0; i < 2; i++) begin
-            eew_d[ara_req_d.vd + i]       = ara_req_d.vtype.vsew;
+            eew_d[ara_req_d.vd + i]       = ara_req_d.eew_vd;
             eew_valid_d[ara_req_d.vd + i] = 1'b1;
           end
         end
         LMUL_4: begin
           for (int i = 0; i < 4; i++) begin
-            eew_d[ara_req_d.vd + i]       = ara_req_d.vtype.vsew;
+            eew_d[ara_req_d.vd + i]       = ara_req_d.eew_vd;
             eew_valid_d[ara_req_d.vd + i] = 1'b1;
           end
         end
         LMUL_8: begin
           for (int i = 0; i < 8; i++) begin
-            eew_d[ara_req_d.vd + i]       = ara_req_d.vtype.vsew;
+            eew_d[ara_req_d.vd + i]       = ara_req_d.eew_vd;
             eew_valid_d[ara_req_d.vd + i] = 1'b1;
           end
         end
         default: begin // EMUL < 1
           for (int i = 0; i < 1; i++) begin
-            eew_d[ara_req_d.vd + i]       = ara_req_d.vtype.vsew;
+            eew_d[ara_req_d.vd + i]       = ara_req_d.eew_vd;
             eew_valid_d[ara_req_d.vd + i] = 1'b1;
           end
         end

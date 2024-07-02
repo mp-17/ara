@@ -288,7 +288,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
 
       ADDRGEN: begin : state_ADDRGEN
         // Ara does not support misaligned AXI requests
-        if (is_addr_error(pe_req_q.scalar_op, pe_req_q.vtype.vsew)) begin : eew_misaligned_error
+        if (is_addr_error(pe_req_q.scalar_op, pe_req_q.eew_vd)) begin : eew_misaligned_error
           state_d         = IDLE;
           addrgen_ack_o   = 1'b1;
           addrgen_exception_o.valid = 1'b1;
@@ -301,10 +301,10 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
 
           case ( pe_req_q.op )
             // Unit-stride: address = base + (vstart in elements)
-            VLE,  VSE : vaddr_start = pe_req_q.scalar_op + ( pe_req_q.vstart << unsigned'(pe_req_q.vtype.vsew) );
+            VLE,  VSE : vaddr_start = pe_req_q.scalar_op + (pe_req_q.vstart << unsigned'(pe_req_q.eew_vd));
             // Strided: address = base + (vstart * stride)
             // NOTE: this multiplier might cause some timing issues
-            VLSE, VSSE: vaddr_start = pe_req_q.scalar_op + ( pe_req_q.vstart * pe_req_q.stride ) ;
+            VLSE, VSSE: vaddr_start = pe_req_q.scalar_op + (pe_req_q.vstart * pe_req_q.stride) ;
             // Indexed: let the next stage take care of vstart
             VLXE, VSXE: vaddr_start = pe_req_q.scalar_op;
             default   : vaddr_start = '0;
@@ -314,7 +314,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
             addr    : vaddr_start,
             len     : pe_req_q.vl - pe_req_q.vstart,
             stride  : pe_req_q.stride,
-            vew     : pe_req_q.vtype.vsew,
+            vew     : pe_req_q.eew_vd,
             is_load : is_load(pe_req_q.op),
             // Unit-strided loads/stores trigger incremental AXI bursts.
             is_burst: (pe_req_q.op inside {VLE, VSE}),
@@ -352,7 +352,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
           addr    : pe_req_q.scalar_op,
           len     : pe_req_q.vl - pe_req_q.vstart,
           stride  : pe_req_q.stride,
-          vew     : pe_req_q.vtype.vsew,
+          vew     : pe_req_q.eew_vd,
           is_load : is_load(pe_req_q.op),
           // Unit-strided loads/stores trigger incremental AXI bursts.
           is_burst: 1'b0,
@@ -366,7 +366,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
           // - We are left with less byte than the maximim to issue,
           //    this means that at least one lane is not going to push us any operand anymore
           // - For the lanes which index % NrLanes != 0
-          if ( ( ( idx_op_cnt_q << pe_req_q.vtype.vsew ) < (NrLanes * DataWidthB) )
+          if ( ( ( idx_op_cnt_q << pe_req_q.eew_vd ) < (NrLanes * DataWidthB) )
                 & ( lane < pe_req_q.vstart[idx_width(NrLanes)-1:0] )
                 ) begin : vstart_lane_adjust
             addrgen_operand_valid[lane] |= 1'b1;

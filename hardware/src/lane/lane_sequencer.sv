@@ -39,10 +39,10 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
   // Find the first lane that will fetch a VRF word with at least a potentially valid element inside
   function automatic logic [$clog2(NrLanes)-1:0] first_active_lane(rvv_pkg::vew_e eew, vlen_t vstart);
     // Start lane
-    // Number of elements in a single L*64-bit fetch: (NrLanes << (64 - pe_req_d.vtype.vsew)).
-    // vstart / (NrLanes << (64 - pe_req_d.vtype.vsew)) -> don't care.
+    // Number of elements in a single L*64-bit fetch: (NrLanes << (64 - pe_req_d.eew_vd)).
+    // vstart / (NrLanes << (64 - pe_req_d.eew_vd)) -> don't care.
     // vstart % NrLanes -> our starting lane if:
-    // (vstart % (NrLanes << (64 - pe_req_d.vtype.vsew))) / NrLanes.
+    // (vstart % (NrLanes << (64 - pe_req_d.eew_vd))) / NrLanes.
     // Otherwise, the starting lane continues to be the 0th.
 
     // Work on the correct number of bits
@@ -76,10 +76,10 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
   // Find the last lane that will fetch a VRF word with at least a potentially valid element inside
   function automatic logic [$clog2(NrLanes)-1:0] last_active_lane(rvv_pkg::vew_e eew, vlen_t vl);
     // End lane
-    // Number of elements in a single L*64-bit fetch: (NrLanes << (64 - vtype.vsew)).
-    // vl / (NrLanes << (64 - vtype.vsew)) -> don't care.
+    // Number of elements in a single L*64-bit fetch: (NrLanes << (64 - eew_vd)).
+    // vl / (NrLanes << (64 - eew_vd)) -> don't care.
     // (vl % NrLanes) - 1 -> our end lane if:
-    // (vl % (NrLanes << (64 - vtype.vsew)) - 1) / NrLanes.
+    // (vl % (NrLanes << (64 - eew_vd)) - 1) / NrLanes.
     // With the end lane we should subtract 1 since vl represents a number of
     // elements and NOT an index.
 
@@ -516,7 +516,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           operand_request[MaskM] = '{
             id     : pe_req.id,
             vs     : VMASK,
-            eew    : pe_req.vtype.vsew,
+            eew    : pe_req.eew_vd,
             vtype  : pe_req.vtype,
             // The payload to the masku is always balanced
 		    words_vreg: balanced_words_vm,
@@ -600,7 +600,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           operand_request[MaskM] = '{
             id     : pe_req.id,
             vs     : VMASK,
-            eew    : pe_req.vtype.vsew,
+            eew    : pe_req.eew_vd,
             vtype  : pe_req.vtype,
             // Since this request goes outside of the lane, we might need to request an
             // extra operand regardless of whether it is valid in this lane or not.
@@ -617,7 +617,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           operand_request[MaskM] = '{
             id     : pe_req.id,
             vs     : VMASK,
-            eew    : pe_req.vtype.vsew,
+            eew    : pe_req.eew_vd,
             vtype  : pe_req.vtype,
             // Since this request goes outside of the lane, we might need to request an
             // extra operand regardless of whether it is valid in this lane or not.
@@ -669,7 +669,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           operand_request[MaskM] = '{
             id     : pe_req.id,
             vs     : VMASK,
-            eew    : pe_req.vtype.vsew,
+            eew    : pe_req.eew_vd,
             vtype  : pe_req.vtype,
             // Since this request goes outside of the lane, we might need to request an
             // extra operand regardless of whether it is valid in this lane or not.
@@ -736,7 +736,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           operand_request[MaskM] = '{
             id      : pe_req.id,
             vs      : VMASK,
-            eew     : pe_req.vtype.vsew,
+            eew     : pe_req.eew_vd,
             is_slide: 1'b1,
             vtype   : pe_req.vtype,
             vstart  : vfu_operation_d.vstart,
@@ -850,7 +850,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           operand_request[MaskM] = '{
             id     : pe_req.id,
             vs     : VMASK,
-            eew    : pe_req.vtype.vsew,
+            eew    : pe_req.eew_vd,
             vtype  : pe_req.vtype,
             vstart : vfu_operation_d.vstart,
             hazard : pe_req.hazard_vm,

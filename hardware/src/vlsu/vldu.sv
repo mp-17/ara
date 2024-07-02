@@ -297,7 +297,7 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
             // Follow the vrf_seq_byte, but without the vstart information
             automatic int unsigned vrf_seq_byte_cnt = axi_byte - lower_byte - axi_r_byte_pnt_q + vrf_word_byte_cnt_q;
             // And then shuffle it
-            automatic int unsigned vrf_byte = shuffle_index(vrf_seq_byte, NrLanes, vinsn_issue_q.vtype.vsew);
+            automatic int unsigned vrf_byte = shuffle_index(vrf_seq_byte, NrLanes, vinsn_issue_q.eew_vd);
 
             // Is this byte a valid byte in the VRF word?
             // We compare vrf_seq_byte_cnt since vrf_seq_byte contains also the vstart contribution, while the issue_cnt_bytes
@@ -325,7 +325,7 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
           vstart_lane = vinsn_issue_q.vstart / NrLanes;
 
           // Store in result queue
-          result_queue_d[result_queue_write_pnt_q][lane].addr = vaddr(vinsn_issue_q.vd, NrLanes) + (vstart_lane >> (EW64 - vinsn_issue_q.vtype.vsew)) + seq_word_wr_offset_q;
+          result_queue_d[result_queue_write_pnt_q][lane].addr = vaddr(vinsn_issue_q.vd, NrLanes) + (vstart_lane >> (EW64 - vinsn_issue_q.eew_vd)) + seq_word_wr_offset_q;
           result_queue_d[result_queue_write_pnt_q][lane].id   = vinsn_issue_q.id;
         end : compute_vrf_addr
       end : operands_valid
@@ -400,9 +400,9 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
           issue_cnt_bytes_d = (
                                 vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vl
                                 - vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vstart
-                              ) << unsigned'(vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vtype.vsew);
+                              ) << unsigned'(vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].eew_vd);
           // Prepare the VRF start pointer
-          vrf_word_start_byte  = vinsn_issue_d.vstart[$clog2(8*NrLanes)-1:0] << vinsn_issue_d.vtype.vsew;
+          vrf_word_start_byte  = vinsn_issue_d.vstart[$clog2(8*NrLanes)-1:0] << vinsn_issue_d.eew_vd;
           vrf_word_byte_pnt_d  = {1'b0, vrf_word_start_byte[$clog2(8*NrLanes)-1:0]};
           vrf_word_byte_cnt_d  = '0;
           seq_word_wr_offset_d = '0;
@@ -481,7 +481,7 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
         commit_cnt_bytes_d = (
                                vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].vl
                                 - vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vstart
-                              ) << unsigned'(vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].vtype.vsew);
+                              ) << unsigned'(vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].eew_vd);
     end : vinsn_done
 
     /////////////////////////
@@ -530,15 +530,15 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
 
       // Initialize counters
       if (vinsn_queue_d.issue_cnt == '0) begin : issue_cnt_bytes_init
-        issue_cnt_bytes_d = (pe_req_i.vl - pe_req_i.vstart) << unsigned'(pe_req_i.vtype.vsew);
+        issue_cnt_bytes_d = (pe_req_i.vl - pe_req_i.vstart) << unsigned'(pe_req_i.eew_vd);
       end : issue_cnt_bytes_init
       if (vinsn_queue_d.commit_cnt == '0) begin : commit_cnt_bytes_init
-        commit_cnt_bytes_d = (pe_req_i.vl - pe_req_i.vstart) << unsigned'(pe_req_i.vtype.vsew);
+        commit_cnt_bytes_d = (pe_req_i.vl - pe_req_i.vstart) << unsigned'(pe_req_i.eew_vd);
       end : commit_cnt_bytes_init
 
       // New instruction with new vstart. Initialize the vrf byte ptr
       if (vinsn_queue_d.issue_cnt == '0) begin
-        vrf_word_start_byte  = pe_req_i.vstart[$clog2(8*NrLanes)-1:0] << pe_req_i.vtype.vsew;
+        vrf_word_start_byte  = pe_req_i.vstart[$clog2(8*NrLanes)-1:0] << pe_req_i.eew_vd;
         vrf_word_byte_pnt_d  = {1'b0, vrf_word_start_byte[$clog2(8*NrLanes)-1:0]};
         vrf_word_byte_cnt_d  = '0;
         seq_word_wr_offset_d = '0;

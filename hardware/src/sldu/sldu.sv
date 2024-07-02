@@ -434,13 +434,13 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     // Slide Unit DP
     sld_op_src  = sldu_operand;
     sld_eew_src = (vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu})
-                ? vinsn_issue_q.vtype.vsew
+                ? vinsn_issue_q.eew_vd
                 : vinsn_issue_q.eew_vs2;
-    sld_eew_dst = vinsn_issue_q.vtype.vsew;
+    sld_eew_dst = vinsn_issue_q.eew_vd;
     sld_dir     = (vinsn_issue_q.op == VSLIDEUP) || (vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu});
     sld_slamt   = (vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu})
                 ? red_stride_cnt_q
-                : stride_t'(vinsn_issue_q.stride >> vinsn_issue_q.vtype.vsew);
+                : stride_t'(vinsn_issue_q.stride >> vinsn_issue_q.eew_vd);
 
     /////////////////
     //  Slide FSM  //
@@ -460,7 +460,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
               out_pnt_d = vinsn_issue_q.stride[idx_width(8*NrLanes)-1:0];
 
               // Initialize counters
-              issue_cnt_d = vinsn_issue_q.vl << int'(vinsn_issue_q.vtype.vsew);
+              issue_cnt_d = vinsn_issue_q.vl << int'(vinsn_issue_q.eew_vd);
 
               // Initialize be-enable-generation ancillary signals
               output_limit_d = vinsn_issue_q.use_scalar_op ? out_pnt_d + issue_cnt_d : issue_cnt_d;
@@ -482,16 +482,16 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
               out_pnt_d = '0;
 
               // Initialize counters
-              issue_cnt_d = vinsn_issue_q.vl << int'(vinsn_issue_q.vtype.vsew);
+              issue_cnt_d = vinsn_issue_q.vl << int'(vinsn_issue_q.eew_vd);
 
               // Initialize be-enable-generation ancillary signals
               output_limit_d = vinsn_issue_q.use_scalar_op
-                             ? issue_cnt_d - (1 << int'(vinsn_issue_q.vtype.vsew))
+                             ? issue_cnt_d - (1 << int'(vinsn_issue_q.eew_vd))
                              : issue_cnt_d;
 
               // Trim the last element of vslide1down, which does not come from the VRF
               if (vinsn_issue_q.use_scalar_op)
-                issue_cnt_d -= 1 << int'(vinsn_issue_q.vtype.vsew);
+                issue_cnt_d -= 1 << int'(vinsn_issue_q.eew_vd);
             end
             // Ordered sum reductions
             VFREDOSUM, VFWREDOSUM: begin
@@ -522,7 +522,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
         // Are we ready?
         // During a reduction (vinsn_issue_q.vfu == VFU_Alu/VFU_MFPU) don't wait for mask bits
         if ((&sldu_operand_valid ||
-           (((vinsn_issue_q.stride[$bits(vinsn_issue_q.vl)-1:0] >> vinsn_issue_q.vtype.vsew) >= vinsn_issue_q.vl) &&
+           (((vinsn_issue_q.stride[$bits(vinsn_issue_q.vl)-1:0] >> vinsn_issue_q.eew_vd) >= vinsn_issue_q.vl) &&
            (state_q == SLIDE_RUN_VSLIDE1UP_FIRST_WORD))) &&
            !result_queue_full && (vinsn_issue_q.vm || vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu} || (|mask_valid_q)))
         begin
@@ -539,7 +539,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
           // Shuffle the output enable
           for (int unsigned b = 0; b < 8*NrLanes; b++)
-            out_en_flat[shuffle_index(b, NrLanes, vinsn_issue_q.vtype.vsew)] = out_en_seq[b];
+            out_en_flat[shuffle_index(b, NrLanes, vinsn_issue_q.eew_vd)] = out_en_seq[b];
 
           // Mask the output enable with the mask vector
           out_en = out_en_flat & ({8*NrLanes{vinsn_issue_q.vm | (vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu})}} | mask_q);
@@ -570,7 +570,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
           // If this is a vslide1up instruction, copy the scalar operand to the first word
           if (state_q == SLIDE_RUN_VSLIDE1UP_FIRST_WORD)
-            unique case (vinsn_issue_q.vtype.vsew)
+            unique case (vinsn_issue_q.eew_vd)
               EW8: begin
                 result_queue_d[result_queue_write_pnt_q][0].wdata[7:0] =
                   vinsn_issue_q.scalar_op[7:0];
@@ -648,11 +648,11 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             if (vinsn_issue_q.op == VSLIDEDOWN && vinsn_issue_q.use_scalar_op) begin
               // Copy the scalar operand to the last word
               automatic int out_seq_byte = issue_cnt_q;
-              automatic int out_byte = shuffle_index(out_seq_byte, NrLanes, vinsn_issue_q.vtype.vsew);
+              automatic int out_byte = shuffle_index(out_seq_byte, NrLanes, vinsn_issue_q.eew_vd);
               automatic int tgt_lane = out_byte[3 +: $clog2(NrLanes)];
               automatic int tgt_lane_offset = out_byte[2:0];
 
-              unique case (vinsn_issue_q.vtype.vsew)
+              unique case (vinsn_issue_q.eew_vd)
                 EW8: begin
                   result_queue_d[result_queue_write_pnt_q][tgt_lane].wdata[8*tgt_lane_offset +: 8]
                     = vinsn_issue_q.scalar_op[7:0];
@@ -737,7 +737,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
         if (sldu_operand_valid_i[0])
           np2_loop_mux_sel_d = NP2_LOOP_SEL;
         // Setup the p2-stride generator
-        p2_stride_gen_stride_d = stride_t'(vinsn_issue_q.stride >> vinsn_issue_q.vtype.vsew);
+        p2_stride_gen_stride_d = stride_t'(vinsn_issue_q.stride >> vinsn_issue_q.eew_vd);
         p2_stride_gen_valid_d  = 1'b1;
         // Start processing the first VRF chunk as soon as the result queue is completely empty
         if (np2_loop_mux_sel_q == NP2_LOOP_SEL && result_queue_empty) begin
@@ -840,7 +840,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       // Update the commit counter for the next instruction
       if (vinsn_queue_d.commit_cnt != '0) begin
         commit_cnt_d = vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].op inside {VSLIDEUP, VSLIDEDOWN}
-                     ? vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].vl << int'(vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].vtype.vsew)
+                     ? vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].vl << int'(vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].eew_vd)
                      : (NrLanes * ($clog2(NrLanes) + 1)) << EW64;
 
         // Trim vector elements which are not written by the slide unit
@@ -861,14 +861,14 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       // Calculate the slide offset inside the vector register
       if (pe_req_i.op inside {VSLIDEUP, VSLIDEDOWN})
         vinsn_queue_d.vinsn[vinsn_queue_q.accept_pnt].stride = pe_req_i.stride <<
-          int'(pe_req_i.vtype.vsew);
+          int'(pe_req_i.eew_vd);
       // Always move 64-bit packs of data from one lane to the other
       if (pe_req_i.vfu inside {VFU_Alu, VFU_MFpu})
-        vinsn_queue_d.vinsn[vinsn_queue_q.accept_pnt].vtype.vsew = EW64;
+        vinsn_queue_d.vinsn[vinsn_queue_q.accept_pnt].eew_vd = EW64;
 
       if (vinsn_queue_d.commit_cnt == '0) begin
         commit_cnt_d = pe_req_i.op inside {VSLIDEUP, VSLIDEDOWN}
-                     ? pe_req_i.vl << int'(pe_req_i.vtype.vsew)
+                     ? pe_req_i.vl << int'(pe_req_i.eew_vd)
                      : (NrLanes * ($clog2(NrLanes) + 1)) << EW64;
         // Trim vector elements which are not written by the slide unit
         // VSLIDE1UP always writes at least 1 element
