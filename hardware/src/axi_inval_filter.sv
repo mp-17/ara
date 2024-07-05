@@ -13,6 +13,7 @@ module axi_inval_filter #(
     // AXI Bus Types
     parameter int  unsigned AddrWidth   = 32'd0,
     parameter int  unsigned L1LineWidth = 32'd0,
+    parameter int  unsigned NumSets     = 32'd0,  
     parameter type          aw_chan_t   = logic,
     parameter type          req_t       = logic,
     parameter type          resp_t      = logic
@@ -54,6 +55,9 @@ module axi_inval_filter #(
   assign inval_addr_o  = aw_fifo_data.addr + inval_offset_q;
   assign inval_valid_o = ~aw_fifo_empty;
 
+  // Counter to track no. of invalidations
+  logic [$clog2(NumSets)-1:0] inv_cnt_d, inv_cnt_q;
+
   //////////////////
   // AXI Handling //
   //////////////////
@@ -74,13 +78,14 @@ module axi_inval_filter #(
   // Invalidation FSM  //
   ///////////////////////
 
-  enum logic { Idle, Invalidating } state_d, state_q;
+  enum logic [1:0] { Idle, Invalidating, Invalidated} state_d, state_q;
 
   always_comb begin : inval_fsm
     // Default assignments
     state_d        = state_q;
     aw_fifo_pop    = 1'b0;
     inval_offset_d = inval_offset_q;
+    inv_cnt_d = inv_cnt_q;
 
     unique case (state_q)
       // Ready for the next invalidation
@@ -91,11 +96,13 @@ module axi_inval_filter #(
           if (inval_ready_i) begin
             // Continue if we are not done yet
             // If the addr is misaligned wrt the cache line, we should invalidate one line more
+            inv_cnt_d = inv_cnt_q + 1;
             if ((L1LineWidth - aw_fifo_data.addr[idx_width(L1LineWidth)-1:0]) < ((aw_fifo_data.len + 1) << aw_fifo_data.size)) begin
               state_d        = Invalidating;
               inval_offset_d = L1LineWidth - aw_fifo_data.addr[idx_width(L1LineWidth)-1:0];
             end else begin
               aw_fifo_pop = 1'b1;
+              inv_cnt_d = aw_fifo_empty ? '0 : inv_cnt_d;
             end
           end
         end
@@ -106,12 +113,31 @@ module axi_inval_filter #(
         // Wait for the L1 to accept a new invalidation request
         if (inval_ready_i) begin
           inval_offset_d = inval_offset_q + L1LineWidth;
-          // Are we done?
-          if (inval_offset_d >= ((aw_fifo_data.len + 1) << aw_fifo_data.size)) begin
+          inv_cnt_d = inv_cnt_q + 1;
+          if (inv_cnt_q == (NumSets-1)) begin
+            // If all the sets have been invalidated, go to state Invalidated
+            state_d = Invalidated;
+            inval_offset_d = '0;
+            aw_fifo_pop    = 1'b1;
+          end else if (inval_offset_d >= ((aw_fifo_data.len + 1) << aw_fifo_data.size)) begin
+            // Are we done?
             state_d        = Idle;
             inval_offset_d = '0;
             aw_fifo_pop    = 1'b1;
+            inv_cnt_d = aw_fifo_empty ? '0 : inv_cnt_d;
           end
+        end
+      end
+
+      Invalidated: begin
+        if (!aw_fifo_empty) begin
+          // Avoid redundant invalidations, so just pop requests here
+          aw_fifo_pop    = 1'b1;
+        end else begin
+          // No available requests, go to state Idle
+          state_d = Idle;
+          inv_cnt_d = '0;
+          inval_offset_d = '0;
         end
       end
     endcase
@@ -121,9 +147,11 @@ module axi_inval_filter #(
     if (!rst_ni) begin
       state_q        <= Idle;
       inval_offset_q <= '0;
+      inv_cnt_q      <= '0;
     end else begin
       state_q        <= state_d;
       inval_offset_q <= inval_offset_d;
+      inv_cnt_q      <= inv_cnt_d;
     end
   end
 

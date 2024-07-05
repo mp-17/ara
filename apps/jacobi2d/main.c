@@ -92,10 +92,10 @@ extern uint64_t C;
 
 extern uint64_t TSTEPS;
 
-extern DATA_TYPE A_s[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
-extern DATA_TYPE B_s[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
-extern DATA_TYPE A_v[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
-extern DATA_TYPE B_v[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern DATA_TYPE A_s[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern DATA_TYPE B_s[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern DATA_TYPE A_v[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern DATA_TYPE B_v[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS), section(".l2")));
 // #define SOURCE_PRINT 1
 
 int main() {

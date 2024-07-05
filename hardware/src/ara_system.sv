@@ -193,10 +193,13 @@ module ara_system import axi_pkg::*; import ara_pkg::*; #(
     .mst_resp_i(ariane_axi_resp       )
   );
 
+  localparam int unsigned nSets = (ariane_pkg::CONFIG_L1D_SIZE * 8)/(ariane_pkg::DCACHE_SET_ASSOC * ariane_pkg::DCACHE_LINE_WIDTH);
+
   axi_inval_filter #(
     .MaxTxns    (16                             ),
     .AddrWidth  (AxiAddrWidth                   ),
     .L1LineWidth(ariane_pkg::DCACHE_LINE_WIDTH/8),
+    .NumSets    (nSets                          ),
     .aw_chan_t  (ara_axi_aw_t                   ),
     .req_t      (ara_axi_req_t                  ),
     .resp_t     (ara_axi_resp_t                 )
