@@ -40,53 +40,31 @@ else:
   # Default: no stripmine
   vsize = 64
 
-avl64 = int(vsize)+10
-avl32 = int(vsize)+10 # To test unaligned 
-avl16 = int(vsize)+10
+avl = int(vsize) + 10  #adding 10 to test unaligned 
+dtype = np.float64
 
 # Create the vectors
-v64a = np.random.rand(avl64).astype(np.float64)
-v64b = np.random.rand(avl64).astype(np.float64)
-v32a = np.random.rand(avl32).astype(np.float32)
-v32b = np.random.rand(avl32).astype(np.float32)
-v16a = np.random.rand(avl16).astype(np.float16)
-v16b = np.random.rand(avl16).astype(np.float16)
-
-# Create the golden output
-gold64 = reduce(lambda a, b: a+b, np.multiply(v64a, v64b))
-gold32 = reduce(lambda a, b: a+b, np.multiply(v32a, v32b))
-gold16 = reduce(lambda a, b: a+b, np.multiply(v16a, v16b))
-gold16 = np.array([gold16, gold16])
-
-# Create the empty result vectors
-res64 = 0
-res32 = 0
-res16 = 0
+va = np.random.rand(avl).astype(dtype)
+vb = np.random.rand(avl).astype(dtype)
+vc = np.random.rand(avl).astype(dtype)
+vres = np.random.rand(avl).astype(dtype)
 
 # Print information on file
 print(".section .data,\"aw\",@progbits")
 emit("vsize", np.array(vsize, dtype=np.uint64))
 
-emit("va", v64a, 'NR_LANES*NR_CLUSTERS*4')
-emit("vb", v64b, 'NR_LANES*NR_CLUSTERS*4')
-# emit("va", v32a, 'NR_LANES*NR_CLUSTERS*4')
-# emit("vb", v32b, 'NR_LANES*NR_CLUSTERS*4')
-# emit("va", v16a, 'NR_LANES*NR_CLUSTERS*4')
-# emit("vb", v16b, 'NR_LANES*NR_CLUSTERS*4')
+# For mask test
+vres = np.minimum(va, vb)
 
-red64 = sum(v64a[0:vsize])
-red32 = sum(v32a[0:vsize])
-red16 = sum(v16a[0:vsize])
-emit("red64", np.array(red64, dtype=np.float64))
-emit("red32", np.array(red32, dtype=np.float32))
-emit("red16", np.array(red16, dtype=np.float32))
+# For reduction test
+red = sum(va[0:vsize])
 
-# emit("gold64", np.array(gold64, dtype=np.float64));
-# emit("gold32", np.array(gold32, dtype=np.float32));
-# emit("gold16", gold16, 'NR_LANES*4');
-# emit("res64_v", np.array(res64, dtype=np.float64));
-# emit("res32_v", np.array(res32, dtype=np.float32));
-# emit("res16_v", np.array(res16, dtype=np.float32));
-# emit("res64_s", np.array(res64, dtype=np.float64));
-# emit("res32_s", np.array(res32, dtype=np.float32));
-# emit("res16_s", np.array(res16, dtype=np.float32));
+emit("va", va, 'NR_LANES*NR_CLUSTERS*4')
+emit("vb", vb, 'NR_LANES*NR_CLUSTERS*4')
+emit("vc", vc, 'NR_LANES*NR_CLUSTERS*4')
+emit("vres", vres, 'NR_LANES*NR_CLUSTERS*4')
+
+if (dtype == np.float16):
+  emit("red", np.array(red, dtype=np.float32))
+else:
+  emit("red", np.array(red, dtype=dtype))

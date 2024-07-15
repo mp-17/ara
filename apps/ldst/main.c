@@ -24,18 +24,21 @@
 #include <stdio.h>
 #endif
 
-#define T double 
+#define T double
 // #define T float
 // #define T _Float16
 
-extern T va[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
-extern T vb[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern T va[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern T vb[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern T vc[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern T vres[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS), section(".l2")));
 extern int vsize;
 
 // #define LDST_TEST  1
 // #define SLIDEDOWN_TEST 1
 // #define SLIDEUP_TEST 1
-#define REDUCTION_TEST 1
+// #define REDUCTION_TEST 1
+#define COMPARISON_TEST  1
 
 #define FP64 1
 // #define FP32 1
@@ -169,7 +172,7 @@ int main() {
 #endif
 
 #ifdef REDUCTION_TEST
-extern T red64, red32, red16;
+extern T red;
 
 int main() {
 	printf("============Reduction Test============\n");
@@ -177,7 +180,7 @@ int main() {
 
 	T *a_ = (T *) va;
 
-  T red;
+  T red_calc;
 
 #ifdef FP64
 	asm volatile("vsetvli %0, %1, e64, m4, ta, ma" : "=r"(vl) : "r"(avl)); // FP64
@@ -197,18 +200,57 @@ int main() {
 #endif
 
 	asm volatile("vfredusum.vs v0, v8, v0");
-	asm volatile("vfmv.f.s %0, v0" : "=f"(red));
-
-#ifdef FP64
-	printf("Res:%f Exp:%f\n", red, red64);
-#elif defined(FP32)
-	printf("Res:%f Exp:%f\n", red, red32);
-#elif defined(FP16)
-	printf("Res:%f Exp:%f\n", red, red16);
-#endif
+	asm volatile("vfmv.f.s %0, v0" : "=f"(red_calc));
+	printf("Res:%f Exp:%f\n", red_calc, red);
   	
 }
 
 #endif
 
+#ifdef COMPARISON_TEST
 
+int main() {
+	printf("============Mask Generation + Masked Operation Test============\n");
+	int vl, avl=vsize;
+
+	T *a_ = (T *) va;
+	T *b_ = (T *) vb;
+	T *c_ = (T *) vc;
+
+#ifdef FP64
+	asm volatile("vsetvli %0, %1, e64, m4, ta, ma" : "=r"(vl) : "r"(avl)); // FP64
+	printf("vl:%d\n",vl);
+	asm volatile("vle64.v v4,  (%0)" ::"r"(a_));  // FP64
+	asm volatile("vle64.v v8,  (%0)" ::"r"(b_));  // FP64
+	asm volatile("vmflt.vv v0, v8, v4");
+	asm volatile("vmerge.vvm v12, v4, v8, v0");
+	asm volatile("vse64.v v12, (%0)" :: "r" (c_));
+#elif defined(FP32)
+	asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(vl) : "r"(avl)); // FP32
+	printf("vl:%d\n",vl);
+	asm volatile("vle32.v v4,  (%0)" ::"r"(a_));  // F32
+	asm volatile("vle32.v v8,  (%0)" ::"r"(b_));  // FP32
+	asm volatile("vmflt.vv v0, v8, v4");
+	asm volatile("vmerge.vvm v12, v4, v8, v0");
+	asm volatile("vse32.v v12, (%0)" :: "r" (c_));
+#elif defined(FP16)
+	asm volatile("vsetvli %0, %1, e16, m4, ta, ma" : "=r"(vl) : "r"(avl)); // FP16
+	printf("vl:%d\n",vl);
+	asm volatile("vle16.v v4,  (%0)" ::"r"(a_));  // FP16
+	asm volatile("vle16.v v8,  (%0)" ::"r"(b_));  // FP16
+	asm volatile("vmflt.vv v0, v8, v4");
+	asm volatile("vmerge.vvm v12, v4, v8, v0");
+	asm volatile("vse16.v v12, (%0)" :: "r" (c_));
+#endif
+
+	for (int i=0; i<avl; i++) {
+		// printf("Error idx:%d val:%f exp:%f\n", i, vc[i], vres[i]);
+		if (vres[i] != vc[i]) {
+			printf("Error idx:%d val:%f exp:%f\n", i, vc[i], vres[i]);
+		}
+	}
+
+return 0;
+}
+
+#endif
