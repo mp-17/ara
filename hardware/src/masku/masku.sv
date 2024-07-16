@@ -361,29 +361,52 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
       // from the previous value of the destination register (mask_operand_b_i). Byte strobes
       // do not work here, since this has to be done at a bit granularity. Therefore, the Mask Unit
       // received both operands, and does a masking depending on the value of the vl.
-      if (vinsn_issue.vl >= ELEN*NrLanes)
-        bit_enable = '1;
-      else begin
-        bit_enable[vinsn_issue.vl] = 1'b1;
-        bit_enable                 = bit_enable - 1;
-      end
-
-      // Shuffle the bit enable signal
-      for (int b = 0; b < NrLanes*StrbWidth; b++) begin
-        automatic int vrf_byte              = shuffle_index(b, NrLanes, bit_enable_shuffle_eew);
-        bit_enable_shuffle[8*vrf_byte +: 8] = bit_enable[8*b +: 8];
-
-        // Take the mask into account
-        if (!vinsn_issue.vm) begin
-          automatic int mask_byte          = shuffle_index(b, NrLanes, vinsn_issue.eew_vmask);
-          automatic int mask_byte_lane     = mask_byte[idx_width(StrbWidth) +: idx_width(NrLanes)];
-          automatic int mask_byte_offset   = mask_byte[idx_width(StrbWidth)-1:0];
-          bit_enable_mask[8*vrf_byte +: 8] = bit_enable_shuffle[8*vrf_byte +: 8] &
-            masku_operand_m_i[mask_byte_lane][8*mask_byte_offset +: 8];
-        end else begin
-          bit_enable_mask[8*vrf_byte +: 8] = bit_enable_shuffle[8*vrf_byte +: 8];
+      
+      `ifndef USE_EEW1
+        if (vinsn_issue.vl >= ELEN*NrLanes)
+          bit_enable = '1;
+        else begin
+          bit_enable[vinsn_issue.vl] = 1'b1;
+          bit_enable                 = bit_enable - 1;
         end
-      end
+
+        // Shuffle the bit enable signal
+        for (int b = 0; b < NrLanes*StrbWidth; b++) begin
+          automatic int vrf_byte              = shuffle_index(b, NrLanes, bit_enable_shuffle_eew);
+          bit_enable_shuffle[8*vrf_byte +: 8] = bit_enable[8*b +: 8];
+
+          // Take the mask into account
+          if (!vinsn_issue.vm) begin
+            automatic int mask_byte          = shuffle_index(b, NrLanes, vinsn_issue.eew_vmask);
+            automatic int mask_byte_lane     = mask_byte[idx_width(StrbWidth) +: idx_width(NrLanes)];
+            automatic int mask_byte_offset   = mask_byte[idx_width(StrbWidth)-1:0];
+            bit_enable_mask[8*vrf_byte +: 8] = bit_enable_shuffle[8*vrf_byte +: 8] &
+              masku_operand_m_i[mask_byte_lane][8*mask_byte_offset +: 8];
+          end else begin
+            bit_enable_mask[8*vrf_byte +: 8] = bit_enable_shuffle[8*vrf_byte +: 8];
+          end
+        end
+      `else
+        if (vinsn_issue.vl >= ELEN*NrLanes)
+          bit_enable = '1;
+        else begin
+          for (int lane=0; lane < NrLanes; lane++) begin
+            automatic int nelements = vinsn_issue.vl >> $clog2(NrLanes);
+            automatic logic[DataWidth-1:0] bit_enable_lane = '0; 
+            if (lane < vinsn_issue.vl[$clog2(NrLanes)-1:0]) begin
+              nelements += 1;
+            end
+            bit_enable_lane[nelements] = 1'b1;
+            bit_enable_lane = bit_enable_lane - 1;
+            if (!vinsn_issue.vm) begin
+              bit_enable_lane = bit_enable_lane & masku_operand_m_i[lane];
+            end
+            bit_enable[lane*DataWidth +: DataWidth] = bit_enable_lane;
+          end
+        end
+        bit_enable_mask = bit_enable;
+        bit_enable_shuffle = bit_enable;
+      `endif
 
       alu_operand_a = masku_operand_a_i;
       alu_operand_b = masku_operand_b_i;
@@ -424,57 +447,94 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
           unique case (vinsn_issue.vtype.vsew)
             EW8: for (int b = 0; b < 8*NrLanes; b++) begin
-                // Shuffle the source byte, then find the lane and the offset of this byte in the
-                // full operand word.
-                automatic int src_byte        = shuffle_index(1*b, NrLanes, EW8);
-                automatic int src_byte_lane   = src_byte[idx_width(StrbWidth) +: idx_width(NrLanes)];
-                automatic int src_byte_offset = src_byte[idx_width(StrbWidth)-1:0];
+                `ifndef USE_EEW1
+                  // Shuffle the source byte, then find the lane and the offset of this byte in the
+                  // full operand word.
+                  automatic int src_byte        = shuffle_index(1*b, NrLanes, EW8);
+                  automatic int src_byte_lane   = src_byte[idx_width(StrbWidth) +: idx_width(NrLanes)];
+                  automatic int src_byte_offset = src_byte[idx_width(StrbWidth)-1:0];
 
-                // Find the destination byte
-                automatic int dest_bit_seq  = b + vrf_pnt_q;
-                automatic int dest_byte_seq = dest_bit_seq / StrbWidth;
-                automatic int dest_byte     = shuffle_index(dest_byte_seq, NrLanes, EW8);
+                  // Find the destination byte
+                  automatic int dest_bit_seq  = b + vrf_pnt_q;
+                  automatic int dest_byte_seq = dest_bit_seq / StrbWidth;
+                  automatic int dest_byte     = shuffle_index(dest_byte_seq, NrLanes, EW8);
 
-                alu_result_flat[StrbWidth*dest_byte + dest_bit_seq[idx_width(StrbWidth)-1:0]] =
-                (!vinsn_issue.vm && !masku_operand_a_i[src_byte_lane][8*src_byte_offset+1]) ?
-                masku_operand_b_i[src_byte_lane][8*src_byte_offset] :
-                masku_operand_a_i[src_byte_lane][8*src_byte_offset];
+                  alu_result_flat[StrbWidth*dest_byte + dest_bit_seq[idx_width(StrbWidth)-1:0]] =
+                  (!vinsn_issue.vm && !masku_operand_a_i[src_byte_lane][8*src_byte_offset+1]) ?
+                  masku_operand_b_i[src_byte_lane][8*src_byte_offset] :
+                  masku_operand_a_i[src_byte_lane][8*src_byte_offset];
+                `else
+                  automatic int src_byte        = shuffle_index(1*b, NrLanes, EW8);
+                  automatic int src_byte_lane   = src_byte[idx_width(StrbWidth) +: idx_width(NrLanes)];
+                  automatic int src_byte_offset = src_byte[idx_width(StrbWidth)-1:0];
+                  automatic int dst_bit_seq_lane = src_byte_offset[idx_width(StrbWidth)-1:0]  + (vrf_pnt_q >> $clog2(NrLanes));
+                  
+                  alu_result_flat[src_byte_lane*DataWidth + dst_bit_seq_lane] = 
+                    (!vinsn_issue.vm && !masku_operand_a_i[src_byte_lane][8*src_byte_offset+1]) ?
+                    masku_operand_b_i[src_byte_lane][8*src_byte_offset] :
+                    masku_operand_a_i[src_byte_lane][8*src_byte_offset];
+                `endif
               end
             EW16: for (int b = 0; b < 4*NrLanes; b++) begin
-                // Shuffle the source byte, then find the lane and the offset of this byte in the
-                // full operand word.
-                automatic int src_byte        = shuffle_index(2*b, NrLanes, EW16);
-                automatic int src_byte_lane   = src_byte[idx_width(StrbWidth) +: idx_width(NrLanes)];
-                automatic int src_byte_offset = src_byte[idx_width(StrbWidth)-1:0];
+                `ifndef USE_EEW1
+                  // Shuffle the source byte, then find the lane and the offset of this byte in the
+                  // full operand word.
+                  automatic int src_byte        = shuffle_index(2*b, NrLanes, EW16);
+                  automatic int src_byte_lane   = src_byte[idx_width(StrbWidth) +: idx_width(NrLanes)];
+                  automatic int src_byte_offset = src_byte[idx_width(StrbWidth)-1:0];
 
-                // Find the destination byte
-                automatic int dest_bit_seq  = b + vrf_pnt_q;
-                automatic int dest_byte_seq = dest_bit_seq / StrbWidth;
-                automatic int dest_byte     = shuffle_index(dest_byte_seq, NrLanes, EW16);
+                  // Find the destination byte
+                  automatic int dest_bit_seq  = b + vrf_pnt_q;
+                  automatic int dest_byte_seq = dest_bit_seq / StrbWidth;
+                  automatic int dest_byte     = shuffle_index(dest_byte_seq, NrLanes, EW16);
 
-                alu_result_flat[StrbWidth*dest_byte + dest_bit_seq[idx_width(StrbWidth)-1:0]] =
-                (!vinsn_issue.vm && !masku_operand_a_i[src_byte_lane][8*src_byte_offset+1]) ?
-                masku_operand_b_i[src_byte_lane][8*src_byte_offset] :
-                masku_operand_a_i[src_byte_lane][8*src_byte_offset];
+                  alu_result_flat[StrbWidth*dest_byte + dest_bit_seq[idx_width(StrbWidth)-1:0]] =
+                  (!vinsn_issue.vm && !masku_operand_a_i[src_byte_lane][8*src_byte_offset+1]) ?
+                  masku_operand_b_i[src_byte_lane][8*src_byte_offset] :
+                  masku_operand_a_i[src_byte_lane][8*src_byte_offset];
+                `else
+                  automatic int src_byte        = shuffle_index(2*b, NrLanes, EW16);
+                  automatic int src_byte_lane   = src_byte[idx_width(StrbWidth) +: idx_width(NrLanes)];
+                  automatic int src_byte_offset = src_byte[idx_width(StrbWidth)-1:0];
+                  automatic int dst_bit_seq_lane = src_byte_offset[idx_width(StrbWidth)-1:idx_width(StrbWidth)-2]  + (vrf_pnt_q >> $clog2(NrLanes));
+                  
+                  alu_result_flat[src_byte_lane*DataWidth + dst_bit_seq_lane] = 
+                    (!vinsn_issue.vm && !masku_operand_a_i[src_byte_lane][8*src_byte_offset+1]) ?
+                    masku_operand_b_i[src_byte_lane][8*src_byte_offset] :
+                    masku_operand_a_i[src_byte_lane][8*src_byte_offset];
+                `endif
               end
             EW32: for (int b = 0; b < 2*NrLanes; b++) begin
-                // Shuffle the source byte, then find the lane and the offset of this byte in the
-                // full operand word.
-                automatic int src_byte        = shuffle_index(4*b, NrLanes, EW32);
-                automatic int src_byte_lane   = src_byte[idx_width(StrbWidth) +: idx_width(NrLanes)];
-                automatic int src_byte_offset = src_byte[idx_width(StrbWidth)-1:0];
+                `ifndef USE_EEW1
+                  // Shuffle the source byte, then find the lane and the offset of this byte in the
+                  // full operand word.
+                  automatic int src_byte        = shuffle_index(4*b, NrLanes, EW32);
+                  automatic int src_byte_lane   = src_byte[idx_width(StrbWidth) +: idx_width(NrLanes)];
+                  automatic int src_byte_offset = src_byte[idx_width(StrbWidth)-1:0];
 
-                // Find the destination byte
-                automatic int dest_bit_seq  = b + vrf_pnt_q;
-                automatic int dest_byte_seq = dest_bit_seq / StrbWidth;
-                automatic int dest_byte     = shuffle_index(dest_byte_seq, NrLanes, EW32);
+                  // Find the destination byte
+                  automatic int dest_bit_seq  = b + vrf_pnt_q;
+                  automatic int dest_byte_seq = dest_bit_seq / StrbWidth;
+                  automatic int dest_byte     = shuffle_index(dest_byte_seq, NrLanes, EW32);
 
-                alu_result_flat[StrbWidth*dest_byte + dest_bit_seq[idx_width(StrbWidth)-1:0]] =
-                (!vinsn_issue.vm && !masku_operand_a_i[src_byte_lane][8*src_byte_offset+1]) ?
-                masku_operand_b_i[src_byte_lane][8*src_byte_offset] :
-                masku_operand_a_i[src_byte_lane][8*src_byte_offset];
+                  alu_result_flat[StrbWidth*dest_byte + dest_bit_seq[idx_width(StrbWidth)-1:0]] =
+                  (!vinsn_issue.vm && !masku_operand_a_i[src_byte_lane][8*src_byte_offset+1]) ?
+                  masku_operand_b_i[src_byte_lane][8*src_byte_offset] :
+                  masku_operand_a_i[src_byte_lane][8*src_byte_offset];
+                `else
+                  automatic int src_byte        = shuffle_index(4*b, NrLanes, EW32);
+                  automatic int src_byte_lane   = src_byte[idx_width(StrbWidth) +: idx_width(NrLanes)];
+                  automatic int src_byte_offset = src_byte[idx_width(StrbWidth)-1:0];
+                  automatic int dst_bit_seq_lane = src_byte_offset[idx_width(StrbWidth)-1] + (vrf_pnt_q >> $clog2(NrLanes));
+                  
+                  alu_result_flat[src_byte_lane*DataWidth + dst_bit_seq_lane] = 
+                    (!vinsn_issue.vm && !masku_operand_a_i[src_byte_lane][8*src_byte_offset+1]) ?
+                    masku_operand_b_i[src_byte_lane][8*src_byte_offset] :
+                    masku_operand_a_i[src_byte_lane][8*src_byte_offset];
+                `endif
               end
             EW64: for (int b = 0; b < 1*NrLanes; b++) begin
+              `ifndef USE_EEW1
                 // Shuffle the source byte, then find the lane and the offset of this byte in the
                 // full operand word.
                 automatic int src_byte        = shuffle_index(8*b, NrLanes, EW64);
@@ -490,6 +550,17 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
                   (!vinsn_issue.vm && !masku_operand_a_i[src_byte_lane][8*src_byte_offset+1]) ?
                   masku_operand_b_i[src_byte_lane][8*src_byte_offset] :
                   masku_operand_a_i[src_byte_lane][8*src_byte_offset];
+              `else
+                automatic int src_byte        = shuffle_index(8*b, NrLanes, EW64);
+                automatic int src_byte_lane   = src_byte[idx_width(StrbWidth) +: idx_width(NrLanes)];
+                automatic int src_byte_offset = src_byte[idx_width(StrbWidth)-1:0];
+                automatic int dst_bit_seq_lane = vrf_pnt_q >> $clog2(NrLanes);
+                
+                alu_result_flat[src_byte_lane*DataWidth + dst_bit_seq_lane] = 
+                  (!vinsn_issue.vm && !masku_operand_a_i[src_byte_lane][8*src_byte_offset+1]) ?
+                  masku_operand_b_i[src_byte_lane][8*src_byte_offset] :
+                  masku_operand_a_i[src_byte_lane][8*src_byte_offset];
+              `endif
               end
             default:;
           endcase
@@ -708,6 +779,8 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
       if (!vinsn_issue.vm && !mask_queue_full && &masku_operand_m_valid_i) begin
         // Copy data from the mask operands into the mask queue
         for (int vrf_seq_byte = 0; vrf_seq_byte < NrLanes*StrbWidth; vrf_seq_byte++) begin
+          
+        `ifndef USE_EEW1
           // Map vrf_seq_byte to the corresponding byte in the VRF word.
           automatic int vrf_byte = shuffle_index(vrf_seq_byte, NrLanes, vinsn_issue.vtype.vsew);
 
@@ -738,6 +811,16 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
           // Copy the mask operand
           mask_queue_d[mask_queue_write_pnt_q][vrf_lane][vrf_offset] =
             masku_operand_m_i[mask_lane][mask_offset];
+        `else
+          automatic int vrf_byte   = shuffle_index(vrf_seq_byte, NrLanes, vinsn_issue.vtype.vsew);
+          automatic int vrf_lane   = vrf_byte >> $clog2(StrbWidth);
+          automatic int vrf_offset = vrf_byte[idx_width(StrbWidth)-1:0];
+          automatic int mask_lane  = vrf_lane;
+          automatic int mask_offset = mask_pnt_q >> $clog2(NrLanes);
+          automatic int mask_seq_bit  = (vrf_byte[idx_width(StrbWidth)-1:0] >> int'(vinsn_issue.vtype.vsew)) + mask_offset;
+          mask_queue_d[mask_queue_write_pnt_q][vrf_lane][vrf_offset] = masku_operand_m_i[mask_lane][mask_seq_bit];
+        `endif
+
         end
 
         // Account for the used operands
@@ -824,9 +907,14 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
           automatic int element_cnt_all_lanes           = (ELENB * NrLanes) >> int'(vinsn_issue.vtype.vsew);
           // How many elements are remaining to be committed? Carry out the calculation with
           // ceil(issue_cnt/8).
-          automatic int remaining_element_cnt_all_lanes = (issue_cnt_q + 7) / 8;
-          remaining_element_cnt_all_lanes               = (remaining_element_cnt_all_lanes +
+          `ifndef USE_EEW1
+            automatic int remaining_element_cnt_all_lanes = (issue_cnt_q + 7) / 8;
+            remaining_element_cnt_all_lanes               = (remaining_element_cnt_all_lanes +
             (1 << int'(vinsn_issue.vtype.vsew)) - 1) >> int'(vinsn_issue.vtype.vsew);
+          `else
+            automatic int remaining_element_cnt_all_lanes = issue_cnt_q;
+          `endif
+          
           if (element_cnt_all_lanes > remaining_element_cnt_all_lanes)
             element_cnt_all_lanes = remaining_element_cnt_all_lanes;
 
