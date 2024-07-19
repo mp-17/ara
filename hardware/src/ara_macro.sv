@@ -30,7 +30,6 @@ module ara_macro import ara_pkg::*; import rvv_pkg::*; #(
     parameter  type                   cluster_axi_resp_t   = logic,
   
     localparam int  unsigned DataWidth = $bits(elen_t),
-    localparam type remote_data_t = logic [DataWidth-1:0],
 
     // Dependant parameters. DO NOT CHANGE!
     // Ara has NrLanes + 3 processing elements: each one of the lanes, the vector load unit, the
@@ -265,17 +264,16 @@ module ara_macro import ara_pkg::*; import rvv_pkg::*; #(
 
     .ring_data_i         (sldu_i             ), 
     .ring_valid_i        (sldu_valid_i       ), 
-    .ring_ready_o        (sldu_ready_o       ),
-
-    .sldu_dir_o          (sldu_dir           ),
-    .sldu_bypass_o       (sldu_bypass        ),
-    .sldu_config_valid_o (sldu_conf_valid    )
+    .ring_ready_o        (sldu_ready_o       )
 
   );
 
   ring_router i_ring_router (
     .clk_i             (clk_i),
     .rst_ni            (rst_ni),
+
+    .cluster_id_i (cluster_id    ),
+    .num_clusters_i  (num_clusters     ),
     
     // From SLDU in ARA
     .sldu_i       (sldu_o        ),
@@ -286,10 +284,6 @@ module ara_macro import ara_pkg::*; import rvv_pkg::*; #(
     .sldu_valid_o (sldu_valid_i  ),
     .sldu_ready_i (sldu_ready_o  ),
 
-    // Ring configuration
-    .dir        (sldu_dir        ),                  // 0-slidedown(left) 1-slideup(right)
-    .bypass     (sldu_bypass     ),
-    .conf_valid (sldu_conf_valid ),
 
     // From other ring routers
     .ring_right_i       (ring_data_r_i      ),

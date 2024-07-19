@@ -40,7 +40,6 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
     parameter  type                   cluster_axi_resp_t   = logic,
   
     localparam int  unsigned DataWidth = $bits(elen_t),
-    localparam type remote_data_t = logic [DataWidth-1:0],
 
     // Dependant parameters. DO NOT CHANGE!
     // Ara has NrLanes + 3 processing elements: each one of the lanes, the vector load unit, the
@@ -202,7 +201,7 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
     for (genvar cluster=0; cluster < NrClusters; cluster++) begin
       for (genvar i=0; i < `RING_LATENCY; i++) begin : p_ring_cut
           spill_register #(
-            .T(elen_t)
+            .T(remote_data_t)
           ) i_ring_latency_left (
             .clk_i  (clk_i                      ),
             .rst_ni (rst_ni                     ),
@@ -217,7 +216,7 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
           );
 
           spill_register #(
-            .T(elen_t)
+            .T(remote_data_t)
           ) i_ring_latency_right (
             .clk_i  (clk_i                      ),
             .rst_ni (rst_ni                     ),
@@ -257,7 +256,7 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
         // Cuts on the ring interface
         // To meet timing at the top level
         spill_register #(
-          .T(elen_t)
+          .T(remote_data_t)
         ) i_ring_macro_spill_left (
           .clk_i  (clk_i                        ),
           .rst_ni (rst_ni                       ),
@@ -272,7 +271,7 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
         );
 
         spill_register #(
-          .T(elen_t)
+          .T(remote_data_t)
         ) i_ring_macro_spill_right (
           .clk_i  (clk_i                        ),
           .rst_ni (rst_ni                       ),

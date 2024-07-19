@@ -32,7 +32,8 @@ package ara_pkg;
   
   // Maximum number of clusters that Ara can support.
   localparam int unsigned MaxNrClusters = 32;
-  typedef logic [$clog2(MaxNrClusters)-1:0] id_cluster_t; 
+  typedef logic [$clog2(MaxNrClusters)-1:0] id_cluster_t;
+  typedef logic [$clog2(MaxNrLanes)-1:0] id_lane_t;
   typedef logic [cf_math_pkg::idx_width($clog2(MaxNrClusters))-1:0] num_cluster_t;
 
   // Ara Features.
@@ -2083,5 +2084,31 @@ package ara_pkg;
     endcase
     return vfrsqrt7_o;
   endfunction : vfrsqrt7_fp64
+
+  // Definitions for ring interconnect
+  
+  typedef struct packed {
+    logic [ELEN-1:0] data;
+    id_lane_t src_lane, dst_lane;
+    id_cluster_t src_cluster, dst_cluster;
+  } remote_data_t;
+
+  function automatic logic find_ring_dir(id_cluster_t src, id_cluster_t dst, num_cluster_t numClusters);
+    logic dir = 1'b0;
+    if (dst > src) begin
+      if ((dst - src) < (numClusters >> 1)) begin
+        dir = 1'b1;
+      end else begin
+        dir = 1'b0;
+      end
+    end else begin
+      if ((src - dst) < (numClusters >> 1)) begin
+        dir = 1'b0;
+      end else begin
+        dir = 1'b1;
+      end
+    end
+    return dir;
+  endfunction : find_ring_dir
 
 endpackage : ara_pkg

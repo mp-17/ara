@@ -2034,7 +2034,8 @@ module vmfpu import ara_pkg::*; import rvv_pkg::*; import fpnew_pkg::*;
           reduction_rx_cnt_d = reduction_rx_cnt_init(NrLanes, lane_id_i); // Inter Lane
           if (lane_id_i == NrLanes-1)
             reduction_rx_cnt_d += reduction_rx_cnt_init(max_cluster_id, cluster_id_i); // Inter cluster
-          sldu_transactions_cnt_d = $clog2(NrLanes) + num_clusters_i + 1;
+          // Adding number of transactions involved in inter cluster reductions
+          sldu_transactions_cnt_d = $clog2(NrLanes) + reduction_rx_cnt_init(max_cluster_id, cluster_id_i) + 1;
 
           // Allow the first valid
           red_hs_synch_d = !(vinsn_issue_d.op inside {VFREDOSUM, VFWREDOSUM}) & is_reduction(vinsn_issue_d.op);
@@ -2115,7 +2116,8 @@ module vmfpu import ara_pkg::*; import rvv_pkg::*; import fpnew_pkg::*;
           reduction_rx_cnt_d = reduction_rx_cnt_init(NrLanes, lane_id_i); // Inter Lane
           if (lane_id_i == NrLanes-1)
             reduction_rx_cnt_d += reduction_rx_cnt_init(max_cluster_id , cluster_id_i); // Inter Cluster
-          sldu_transactions_cnt_d = $clog2(NrLanes) + num_clusters_i + 1;
+          // Adding number of transactions involved in inter cluster reductions
+          sldu_transactions_cnt_d = $clog2(NrLanes) + reduction_rx_cnt_init(max_cluster_id, cluster_id_i) + 1;
 
           // Allow the first valid
           red_hs_synch_d = !(vinsn_issue_d.op inside {VFREDOSUM, VFWREDOSUM}) & is_reduction(vinsn_issue_d.op);
@@ -2153,7 +2155,9 @@ module vmfpu import ara_pkg::*; import rvv_pkg::*; import fpnew_pkg::*;
         reduction_rx_cnt_d      = reduction_rx_cnt_init(NrLanes, lane_id_i); // Inter Lane
         if (lane_id_i == NrLanes-1)
            reduction_rx_cnt_d += reduction_rx_cnt_init(max_cluster_id, cluster_id_i); // Inter Cluster
-        sldu_transactions_cnt_d = $clog2(NrLanes) + num_clusters_i + 1;
+        // Adding number of transactions involved in inter cluster reductions
+        // 4 clusters = c0->c1 c2->c3, c1->c3 c0-1, c1-2, c2-1, c3-3
+        sldu_transactions_cnt_d = $clog2(NrLanes) + reduction_rx_cnt_init(max_cluster_id, cluster_id_i) + 1;
 
         // Allow the first valid
         red_hs_synch_d          =

@@ -11,12 +11,14 @@
 // Otherwise data is send to the Slide Unit of the Cluster.
 
 module ring_router import ara_pkg::*; #(
-	localparam int  unsigned DataWidth = $bits(elen_t),
-	localparam type remote_data_t = logic [DataWidth-1:0]
+	localparam int  unsigned DataWidth = $bits(elen_t)
 	) (
 
 	input logic clk_i, 
-	input logic rst_ni, 
+	input logic rst_ni,
+
+	input id_cluster_t cluster_id_i,
+	input num_cluster_t num_clusters_i,
 	
 	// From SLDU in ARA
 	input remote_data_t sldu_i,
@@ -26,10 +28,6 @@ module ring_router import ara_pkg::*; #(
 	output remote_data_t sldu_o,
 	output logic sldu_valid_o,
 	input logic sldu_ready_i,
-
-	input logic dir,                  // 0-move data left (slidedown) 1- move data right
-	input logic bypass,
-	input logic conf_valid,
 
 	// From other ring routers
 	input remote_data_t ring_right_i,
@@ -58,21 +56,12 @@ module ring_router import ara_pkg::*; #(
 	logic ring_right_ready_inp, ring_left_ready_inp;
 	logic ring_right_valid_out, ring_left_valid_out;
 
-	logic dir_d, dir_q;
-	logic bypass_d, bypass_q;
-
-	always_ff @(posedge clk_i or negedge rst_ni) begin
-		if(~rst_ni) begin
-			dir_q <= 1'b0;
-			bypass_q <= 1'b0;
-		end else begin 
-			dir_q <= dir_d;
-			bypass_q <= bypass_d;
-		end
-	end
+	logic sldu_ready_o_1, sldu_ready_o_2;
+	logic ring_right_ready_out_1, ring_right_ready_out_2;
+	logic ring_left_ready_out_1, ring_left_ready_out_2;
 
 	spill_register #(
-		.T(elen_t)
+		.T(remote_data_t)
 	) i_ring_right_spill_register (
 		.clk_i  (clk_i                        ),
 		.rst_ni (rst_ni                       ),
@@ -87,7 +76,7 @@ module ring_router import ara_pkg::*; #(
 	);
 
 	spill_register #(
-		.T(elen_t)
+		.T(remote_data_t)
 	) i_ring_left_spill_register (
 		.clk_i  (clk_i                        ),
 		.rst_ni (rst_ni                       ),
@@ -102,7 +91,7 @@ module ring_router import ara_pkg::*; #(
 	);
 
 	spill_register #(
-		.T(elen_t)
+		.T(remote_data_t)
 	) i_ring_right_spill_register_o (
 		.clk_i  (clk_i                        ),
 		.rst_ni (rst_ni                       ),
@@ -117,7 +106,7 @@ module ring_router import ara_pkg::*; #(
 	);
 
 	spill_register #(
-		.T(elen_t)
+		.T(remote_data_t)
 	) i_ring_left_spill_register_o (
 		.clk_i  (clk_i                        ),
 		.rst_ni (rst_ni                       ),
@@ -130,57 +119,62 @@ module ring_router import ara_pkg::*; #(
 		.ready_i(ring_left_ready_i            ),
 		.data_o (ring_left_o                  )
 	);
+	logic dir_sldu_inp;
 
-	always_comb begin
-		ring_left_out          = '0;
-		ring_left_valid_out    = 1'b0;
-		sldu_ready_o           = 1'b0;
-		sldu_o                 = '0;
-		sldu_valid_o           = 1'b0;
-		ring_right_valid_out   = 1'b0;
-		ring_right_ready_out   = 1'b0;
-    	ring_right_out         = '0;
-		ring_left_ready_out    = 1'b0;
+	stream_arbiter #(
+		.DATA_T(remote_data_t), 
+		.N_INP(2),
+		.ARBITER("rr")
+	) i_ring_left (
+		.clk_i(clk_i), 
+		.rst_ni(rst_ni),
 
-		bypass_d = bypass_q;
-		dir_d = dir_q;
+		.inp_data_i({ring_right_inp, sldu_i}), 
+		.inp_valid_i({ring_right_valid_inp & (ring_right_inp.dst_cluster != cluster_id_i), sldu_valid_i & (dir_sldu_inp == 1'b0)}),
+		.inp_ready_o({ring_right_ready_out_1, sldu_ready_o_1}),
 		
-		if (conf_valid) begin
-			bypass_d = bypass;
-			dir_d = dir;
-		end
-		// bypass_d = conf_valid ? bypass : bypass_q;
-		// dir_d    = conf_valid ? dir    : dir_q;
+		.oup_data_o (ring_left_out), 
+		.oup_valid_o (ring_left_valid_out),
+		.oup_ready_i (ring_left_ready_inp)
+	);
 
-		if (~bypass_d) begin
-			if (dir_d==0) begin
-				ring_left_out        = sldu_i;
-				ring_left_valid_out  = sldu_valid_i;
-				sldu_ready_o         = ring_left_ready_inp;
-				  
-				sldu_o               = ring_right_inp;
-				sldu_valid_o         = ring_right_valid_inp;
-				ring_right_ready_out = sldu_ready_i;
-			end else begin
-				ring_right_out       = sldu_i;
-				ring_right_valid_out = sldu_valid_i;
-				sldu_ready_o         = ring_right_ready_inp;
+	stream_arbiter #(
+		.DATA_T(remote_data_t), 
+		.N_INP(2),
+		.ARBITER("rr")
+	) i_ring_right (
+		.clk_i(clk_i), 
+		.rst_ni(rst_ni),
 
-				sldu_o               = ring_left_inp;
-				sldu_valid_o         = ring_left_valid_inp;
-				ring_left_ready_out  = sldu_ready_i;
-			end
-		end else begin
-			if (dir_d==0) begin
-				ring_left_out        = ring_right_inp;
-				ring_left_valid_out  = ring_right_valid_inp;
-				ring_right_ready_out = ring_left_ready_inp;
-			end else begin
-				ring_right_out       = ring_left_inp;
-				ring_right_valid_out = ring_left_valid_inp;
-				ring_left_ready_out  = ring_right_ready_inp;
-			end
-		end
-	end
+		.inp_data_i({ring_left_inp, sldu_i}), 
+		.inp_valid_i({ring_left_valid_inp & (ring_left_inp.dst_cluster!=cluster_id_i), sldu_valid_i & (dir_sldu_inp == 1'b1)}),
+		.inp_ready_o({ring_left_ready_out_1, sldu_ready_o_2}),
+		
+		.oup_data_o (ring_right_out), 
+		.oup_valid_o (ring_right_valid_out),
+		.oup_ready_i (ring_right_ready_inp)
+	);
+
+	stream_arbiter #(
+		.DATA_T(remote_data_t), 
+		.N_INP(2),
+		.ARBITER("rr")
+	) i_sldu_o (
+		.clk_i(clk_i), 
+		.rst_ni(rst_ni),
+
+		.inp_data_i({ring_right_inp, ring_left_inp}), 
+		.inp_valid_i({ring_right_valid_inp & (ring_right_inp.dst_cluster==cluster_id_i), ring_left_valid_inp & (ring_left_inp.dst_cluster==cluster_id_i)}),
+		.inp_ready_o({ring_right_ready_out_2, ring_left_ready_out_2}),
+		
+		.oup_data_o (sldu_o),
+		.oup_valid_o (sldu_valid_o),
+		.oup_ready_i (sldu_ready_i)
+	);
+
+	assign ring_right_ready_out = ring_right_ready_out_1 | ring_right_ready_out_2;
+	assign ring_left_ready_out = ring_left_ready_out_1 | ring_left_ready_out_2;
+	assign sldu_ready_o = sldu_ready_o_1 | sldu_ready_o_2;
+	assign dir_sldu_inp = find_ring_dir(sldu_i.src_cluster, sldu_i.dst_cluster, (1 << num_clusters_i));
 
 endmodule

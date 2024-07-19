@@ -22,3 +22,4 @@ add wave -noupdate -group Ara[$1] -group vlsu -group addrgen /ara_tb/dut/i_ara_s
 add wave -noupdate -group Ara[$1] -group vlsu -group vldu /ara_tb/dut/i_ara_soc/i_system/i_ara_cluster/p_cluster[$1]/i_ara_macro/i_ara/i_vlsu/i_vldu/*
 add wave -noupdate -group Ara[$1] -group vlsu -group vstu /ara_tb/dut/i_ara_soc/i_system/i_ara_cluster/p_cluster[$1]/i_ara_macro/i_ara/i_vlsu/i_vstu/*
 add wave -noupdate -group Ara[$1] -group vlsu /ara_tb/dut/i_ara_soc/i_system/i_ara_cluster/p_cluster[$1]/i_ara_macro/i_ara/i_vlsu/*
+add wave -noupdate -group Ara[$1] -group ring_router /ara_tb/dut/i_ara_soc/i_system/i_ara_cluster/p_cluster[$1]/i_ara_macro/i_ring_router/*

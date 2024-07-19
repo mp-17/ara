@@ -27,7 +27,6 @@ module ara import ara_pkg::*; import rvv_pkg::*; #(
     parameter  type                   axi_resp_t   = logic,
 
     localparam int  unsigned DataWidth = $bits(elen_t),
-    localparam type remote_data_t = logic [DataWidth-1:0],
 
 
     // Dependant parameters. DO NOT CHANGE!
@@ -61,11 +60,7 @@ module ara import ara_pkg::*; import rvv_pkg::*; #(
 
     input remote_data_t ring_data_i,
     input logic ring_valid_i,
-    output logic ring_ready_o,
-
-    output logic sldu_dir_o,
-    output logic sldu_bypass_o,
-    output logic sldu_config_valid_o
+    output logic ring_ready_o
 
   );
 
@@ -442,10 +437,7 @@ module ara import ara_pkg::*; import rvv_pkg::*; #(
 
     .sldu_ring_i             (ring_data_i),
     .sldu_ring_valid_i       (ring_valid_i),
-    .sldu_ring_ready_o       (ring_ready_o),
-    .sldu_dir_o              (sldu_dir_o),
-    .sldu_bypass_o           (sldu_bypass_o),
-    .sldu_config_valid_o     (sldu_config_valid_o)
+    .sldu_ring_ready_o       (ring_ready_o)
   );
 
   /////////////////
