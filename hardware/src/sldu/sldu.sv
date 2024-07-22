@@ -429,6 +429,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   
   // Assigning Interface
   id_cluster_t dst_cluster;
+  id_lane_t src_lane;
+  id_lane_t dst_lane_d, dst_lane_q;
   
   assign fifo_ring_inp = sldu_ring_i.data;
   assign fifo_ring_valid_inp = sldu_ring_valid_i; 
@@ -437,6 +439,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   assign sldu_ring_o.data = fifo_ring_out;
   assign sldu_ring_o.src_cluster = cluster_id_i;
   assign sldu_ring_o.dst_cluster = dst_cluster;
+  assign sldu_ring_o.dst_lane = dst_lane_q;
+  assign sldu_ring_o.src_lane = src_lane;
 
   assign sldu_ring_valid_o = fifo_ring_valid_out;
   assign fifo_ring_ready_inp = sldu_ring_ready_i; 
@@ -459,17 +463,25 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   id_cluster_t max_cluster_id; 
   assign max_cluster_id = (1 << num_clusters_i) - 1;
 
+  // maximum 4 64-bit data send out of a cluster on to the ring
+  logic [3:0] n_ring_out_d, n_ring_out_q;
+  logic [$clog2(MaxNrClusters):0] dst_cl;
+
   always_ff @(posedge clk_i or negedge rst_ni) begin : proc_ring
     if(~rst_ni) begin
       ring_data_prev_q       <= '0;
       ring_data_prev_valid_q <= 1'b0;
       cluster_red_cnt_q      <= '0;
       ring_cnt_q             <= '0;
+      n_ring_out_q           <= '0;
+      dst_lane_q             <= '0;
     end else begin
       ring_data_prev_q       <= ring_data_prev_d;
       ring_data_prev_valid_q <= ring_data_prev_valid_d;
       cluster_red_cnt_q      <= cluster_red_cnt_d;
       ring_cnt_q             <= ring_cnt_d;
+      n_ring_out_q           <= n_ring_out_d;
+      dst_lane_q             <= dst_lane_d;
     end
   end
   
@@ -547,6 +559,10 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     slide_data_valid = 1'b0;
 
     dst_cluster = '0;
+    update_inp_op_pnt = 1'b0;
+
+    n_ring_out_d = n_ring_out_q;
+    dst_lane_d = dst_lane_q;
 
     /////////////////
     //  Slide FSM  //
@@ -570,19 +586,30 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
               // vslideup starts reading the source operand from its beginning
               in_pnt_d  = '0;
               // vslideup starts writing the destination vector at the slide offset
-              out_pnt_d = '0; //vinsn_issue_q.stride[idx_width(8*NrLanes)-1:0];
+              
+              if (vinsn_issue_q.stride > ((1 << vinsn_issue_q.vtype.vsew) * NrLanes * cluster_id_i)) begin
+                automatic int offset = vinsn_issue_q.stride - ((1 << vinsn_issue_q.vtype.vsew) * NrLanes * cluster_id_i);
+                out_pnt_d = offset >> (1 << num_clusters_i); // in bytes
+                vrf_pnt_d = out_pnt_d >> $clog2(8*NrLanes);
+              end else begin
+                 out_pnt_d = '0;
+                 vrf_pnt_d = '0;
+              end
+              n_ring_out_d = vinsn_issue_q.stride / (1 << vinsn_issue_q.vtype.vsew);
 
               // Initialize counters
               issue_cnt_d = vinsn_issue_q.vl << int'(vinsn_issue_q.vtype.vsew);
 
               // Initialize be-enable-generation ancillary signals
-              output_limit_d = vinsn_issue_q.use_scalar_op ? out_pnt_d + issue_cnt_d : issue_cnt_d;
+              output_limit_d = issue_cnt_d; //output_limit_d = vinsn_issue_q.use_scalar_op ? out_pnt_d + issue_cnt_d : issue_cnt_d;
 
               // Trim vector elements which are not touched by the slide unit
               ////issue_cnt_d -= vinsn_issue_q.stride[$bits(issue_cnt_d)-1:0];
 
               // Start writing at the middle of the destination vector
               vrf_pnt_d = vinsn_issue_q.stride >> $clog2(8*NrLanes);
+
+              dst_lane_d = '0;
 
               // Go to SLIDE_RUN_VSLIDE1UP_FIRST_WORD if this is a vslide1up instruction
               if (vinsn_issue_q.use_scalar_op)
@@ -635,11 +662,6 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
            !result_queue_full && (vinsn_issue_q.vm || vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu} || (|mask_valid_q)))
         begin
 
-          // How many bytes are we copying from the operand to the destination, in this cycle?
-          automatic int in_byte_count = NrLanes * 8 - in_pnt_q;
-          automatic int out_byte_count = NrLanes * 8 - out_pnt_q;
-          automatic int byte_count = in_byte_count < out_byte_count ? in_byte_count : out_byte_count;
-
           // Build the sequential byte-output-enable
           for (int unsigned b = 0; b < 8*NrLanes; b++)
             if ((b >= out_pnt_q && b < output_limit_q) || vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu})
@@ -669,19 +691,30 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
           // Depending on the operation being performed, decide whether to update pointers
           // Also decide whether to use the ring or not for reductions.
-          update_inp_op_pnt = 1'b0;
+          // update_inp_op_pnt = 1'b0;
           if (vinsn_issue_q.op inside {VSLIDEUP, VSLIDEDOWN}) begin
-            // sldu_config_valid_o = 1'b1;
             // Slide operation
-
-            fifo_ring_out = vinsn_issue_q.op==VSLIDEDOWN ? sldu_operand[0] : sldu_operand[NrLanes-1];
             if (vinsn_issue_q.op==VSLIDEDOWN) begin
+              src_lane = '0;
               dst_cluster = (cluster_id_i == 0) ? max_cluster_id : (cluster_id_i - 1);
             end else begin
-              dst_cluster = (cluster_id_i == max_cluster_id) ? '0 : (cluster_id_i + 1);
+              automatic int dst_lane = NrLanes*(cluster_id_i+1) - n_ring_out_q + (vinsn_issue_q.stride / (1 << vinsn_issue_q.vtype.vsew));
+              src_lane = NrLanes - n_ring_out_q;
+              if (dst_lane < (NrLanes << num_clusters_i))
+                dst_cluster = dst_lane / NrLanes;
+              else
+                dst_cluster = (dst_lane - (NrLanes << num_clusters_i)) / NrLanes;
             end
+
+            fifo_ring_out = sldu_operand[src_lane];
             fifo_ring_valid_out = 1'b1;
-            update_inp_op_pnt = fifo_ring_ready_inp;
+            
+            if (fifo_ring_ready_inp) begin
+              n_ring_out_d = n_ring_out_q - 1;
+              dst_lane_d = dst_lane_q + 1;
+              // If this was the last packet to be send on the ring, update pointer
+              update_inp_op_pnt = (n_ring_out_q == 1) ? 1'b1 : 1'b0;
+            end
 
           end else begin
             // Reduction operation
@@ -765,6 +798,11 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             // Reset the pointer and ask for a new operand
             in_pnt_d           = '0;
             sldu_operand_ready = '1;
+
+            // For the next incoming packet reset ring to send to lane 0 dst first
+            // reset the counter for number of ring packets
+            dst_lane_d         = '0;
+            n_ring_out_d = vinsn_issue_q.stride / (1 << vinsn_issue_q.vtype.vsew);
             
             // Left-rotate the logarithmic counter. Hacky way to write it, but it's to
             // deal with the 2-lanes design without complaints from Verilator...
