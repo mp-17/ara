@@ -455,6 +455,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   logic sld_dir_ring;
 
   logic is_edge_cluster, use_fifo_inp;
+  logic is_ring_reduction;
   id_cluster_t max_cluster_id; 
   assign max_cluster_id = (1 << num_clusters_i) - 1;
 
@@ -707,6 +708,9 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
                 if (fifo_ring_ready_inp) begin
                   update_inp_op_pnt = 1'b1;
                   cluster_red_cnt_d = cluster_red_cnt_q + 1;
+                  // final packet needed for cluster-0 once reduction finishes
+                  // so do not update slide data valid to 1
+                  slide_data_valid = (cluster_id_i == 0) ? 1'b0 : 1'b1;
                 end
               end else if (receive_data_ring) begin
                 // In the receiving state, don't send anything on the ring
@@ -1000,17 +1004,18 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     
     edge_lane_id = (vinsn_ring.op==VSLIDEDOWN || vinsn_ring.vfu inside {VFU_Alu, VFU_MFpu}) ? NrLanes-1 : 0;
     is_edge_cluster = (cluster_id_i == max_cluster_id && vinsn_ring.op==VSLIDEDOWN) || (cluster_id_i==0 && vinsn_ring.op==VSLIDEUP);
-    
+    is_ring_reduction = vinsn_ring.vfu inside {VFU_Alu, VFU_MFpu};
+
     // For the edge cluster alone, for slidedown, the last 8*NrLanes bytes should not be ring but from previous ring packet and scalar operand.
     use_fifo_inp = 1'b1;
     if (is_edge_cluster && vinsn_ring.op==VSLIDEDOWN && (ring_cnt_q <= 8*NrLanes) && ring_data_prev_valid_q) begin
       use_fifo_inp = 1'b0;
     end
     
-    // if (result_queue_cnt_d && 
-    //     ((vinsn_queue_d.issue_pnt != vinsn_queue_d.ring_pnt) || ((issue_cnt_d < ring_cnt_d) && (vinsn_queue_d.issue_pnt == vinsn_queue_d.ring_pnt)))) begin
+    if (result_queue_cnt_d &&
+        (((vinsn_queue_d.issue_pnt != vinsn_queue_d.ring_pnt) || ((issue_cnt_d < ring_cnt_d) && (vinsn_queue_d.issue_pnt == vinsn_queue_d.ring_pnt))) || 
+        is_ring_reduction)) begin
     
-    if (result_queue_cnt_d) begin
       // If we are in the same instruction and we expect a fifo packet, only then process a fifo packet
       // Otherwise issue has already gone to the next instruction in which case fifo packets are to be used.
       if (fifo_ring_valid_inp && use_fifo_inp) begin

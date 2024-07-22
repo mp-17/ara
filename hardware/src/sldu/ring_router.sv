@@ -171,9 +171,13 @@ module ring_router import ara_pkg::*; #(
 		.oup_valid_o (sldu_valid_o),
 		.oup_ready_i (sldu_ready_i)
 	);
-
-	assign ring_right_ready_out = ring_right_ready_out_1 | ring_right_ready_out_2;
-	assign ring_left_ready_out = ring_left_ready_out_1 | ring_left_ready_out_2;
+    
+	// Because a spill register is used ring_right_ready_out_1 and ring_left_ready_out_1 are 1 by default
+	// So we also and if the data is valid to get the final ready_out signal
+	assign ring_right_ready_out = (ring_right_ready_out_1 & (ring_right_inp.dst_cluster != cluster_id_i)) | 
+									ring_right_ready_out_2;
+	assign ring_left_ready_out  = (ring_left_ready_out_1 & (ring_left_inp.dst_cluster != cluster_id_i)) | 
+									ring_left_ready_out_2;
 	assign sldu_ready_o = sldu_ready_o_1 | sldu_ready_o_2;
 	assign dir_sldu_inp = find_ring_dir(sldu_i.src_cluster, sldu_i.dst_cluster, (1 << num_clusters_i));
 
