@@ -208,7 +208,11 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   np2_loop_mux_e np2_loop_mux_sel_d, np2_loop_mux_sel_q;
 
   logic slide_np2_buf_valid_d, slide_np2_buf_valid_q;
-
+  
+  // To have a reference data
+  elen_t [NrLanes-1:0] sldu_operand_ref_d, sldu_operand_ref;
+  logic [NrLanes-1:0]  sldu_operand_ref_valid_d, sldu_operand_ref_valid;
+  logic [NrLanes-1:0]  sldu_operand_ref_ready;
 
   for (genvar l = 0; l < NrLanes; l++) begin
     spill_register #(
@@ -223,6 +227,26 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       .ready_i(sldu_operand_ready[l]      ),
       .data_o (sldu_operand[l]            )
     );
+    
+    // To buffer the input data for reference
+    // Done since sldu_operand changes for non power of 2 slides
+    spill_register #(
+      .T(elen_t)
+    ) i_sldu_ref_register (
+      .clk_i  (clk_i                      ),
+      .rst_ni (rst_ni                     ),
+      .valid_i(sldu_operand_ref_valid_d[l]    ),
+      .ready_o(),
+      .data_i (sldu_operand_ref_d[l]          ),
+      .valid_o(sldu_operand_ref_valid[l]      ),
+      .ready_i(sldu_operand_ref_ready[l]      ),
+      .data_o (sldu_operand_ref[l]            )
+    );
+  end
+
+  always_comb begin
+    sldu_operand_ref_d = sldu_operand_i;
+    sldu_operand_ref_valid_d = sldu_operand_valid_i;
   end
 
   always_comb begin
@@ -445,8 +469,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   assign sldu_ring_valid_o = fifo_ring_valid_out;
   assign fifo_ring_ready_inp = sldu_ring_ready_i; 
 
-  elen_t ring_data_prev_d, ring_data_prev_q;
-  logic ring_data_prev_valid_d, ring_data_prev_valid_q;
+  elen_t [NrLanes-1:0] ring_data_prev_d, ring_data_prev_q;
+  logic [NrLanes-1:0] ring_data_prev_valid_d, ring_data_prev_valid_q;
   logic slide_data_valid;
   logic [$clog2(NrLanes)-1:0] edge_lane_id;
   logic [NrLanes-1:0] slide_data_accepted;
@@ -464,16 +488,18 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   assign max_cluster_id = (1 << num_clusters_i) - 1;
 
   // maximum 4 64-bit data send out of a cluster on to the ring
-  logic [3:0] n_ring_out_d, n_ring_out_q;
+  logic [$clog2(NrLanes)-1:0] n_ring_out_d, n_ring_out_q;
+  logic [$clog2(NrLanes)-1:0] n_ring_in_d, n_ring_in_q;
   logic [$clog2(MaxNrClusters):0] dst_cl;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : proc_ring
     if(~rst_ni) begin
       ring_data_prev_q       <= '0;
-      ring_data_prev_valid_q <= 1'b0;
+      ring_data_prev_valid_q <= '0;
       cluster_red_cnt_q      <= '0;
       ring_cnt_q             <= '0;
       n_ring_out_q           <= '0;
+      n_ring_in_q            <= '0;
       dst_lane_q             <= '0;
     end else begin
       ring_data_prev_q       <= ring_data_prev_d;
@@ -481,6 +507,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       cluster_red_cnt_q      <= cluster_red_cnt_d;
       ring_cnt_q             <= ring_cnt_d;
       n_ring_out_q           <= n_ring_out_d;
+      n_ring_in_q            <= n_ring_in_d;
       dst_lane_q             <= dst_lane_d;
     end
   end
@@ -562,7 +589,10 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     update_inp_op_pnt = 1'b0;
 
     n_ring_out_d = n_ring_out_q;
+    n_ring_in_d = n_ring_in_q;
     dst_lane_d = dst_lane_q;
+
+    sldu_operand_ref_ready = '0;
 
     /////////////////
     //  Slide FSM  //
@@ -589,13 +619,13 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
               
               if (vinsn_issue_q.stride > ((1 << vinsn_issue_q.vtype.vsew) * NrLanes * cluster_id_i)) begin
                 automatic int offset = vinsn_issue_q.stride - ((1 << vinsn_issue_q.vtype.vsew) * NrLanes * cluster_id_i);
-                out_pnt_d = offset >> (1 << num_clusters_i); // in bytes
+                out_pnt_d = offset; // in bytes
                 vrf_pnt_d = out_pnt_d >> $clog2(8*NrLanes);
               end else begin
                  out_pnt_d = '0;
                  vrf_pnt_d = '0;
               end
-              n_ring_out_d = vinsn_issue_q.stride / (1 << vinsn_issue_q.vtype.vsew);
+              n_ring_out_d = (vinsn_issue_q.stride >> int'(vinsn_issue_q.vtype.vsew)) % NrLanes;
 
               // Initialize counters
               issue_cnt_d = vinsn_issue_q.vl << int'(vinsn_issue_q.vtype.vsew);
@@ -680,6 +710,10 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
               if (out_en[lane][b]) begin
                 result_queue_d[result_queue_write_pnt_q][lane].wdata[8*b +: 8] = sld_op_dst[lane][8*b +: 8];
                 result_queue_d[result_queue_write_pnt_q][lane].be[b]           = 1'b1;
+              end else begin
+                // Unchanged policy
+                result_queue_d[result_queue_write_pnt_q][lane].wdata[8*b +: 8] = sldu_operand_ref[lane][8*b +: 8];
+                result_queue_d[result_queue_write_pnt_q][lane].be[b]           = 1'b1;
               end
 
           // Initialize id and addr fields of the result queue requests
@@ -706,7 +740,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
                 dst_cluster = (dst_lane - (NrLanes << num_clusters_i)) / NrLanes;
             end
 
-            fifo_ring_out = sldu_operand[src_lane];
+            fifo_ring_out = sldu_operand_ref[src_lane];
             fifo_ring_valid_out = 1'b1;
             
             if (fifo_ring_ready_inp) begin
@@ -798,6 +832,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             // Reset the pointer and ask for a new operand
             in_pnt_d           = '0;
             sldu_operand_ready = '1;
+            sldu_operand_ref_ready = '1;
 
             // For the next incoming packet reset ring to send to lane 0 dst first
             // reset the counter for number of ring packets
@@ -851,7 +886,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             if (result_queue_write_pnt_q == ResultQueueDepth-1)
               result_queue_write_pnt_d = '0;
 
-            if (state_q == SLIDE_NP2_COMMIT) state_d = SLIDE_NP2_WAIT;
+            // if (state_q == SLIDE_NP2_COMMIT) 
+            //   state_d = SLIDE_NP2_WAIT;
           end
 
         end
@@ -935,6 +971,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             state_d = SLIDE_NP2_COMMIT;
             // Prepare the write pointer
             result_queue_write_pnt_d = NP2_RESULT_PNT;
+            // Ring data should also update to this pointer
+            result_queue_write_pnt_q1 = NP2_RESULT_PNT;
           end
         end
       end
@@ -1046,7 +1084,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
     // For the edge cluster alone, for slidedown, the last 8*NrLanes bytes should not be ring but from previous ring packet and scalar operand.
     use_fifo_inp = 1'b1;
-    if (is_edge_cluster && vinsn_ring.op==VSLIDEDOWN && (ring_cnt_q <= 8*NrLanes) && ring_data_prev_valid_q) begin
+    if (is_edge_cluster && vinsn_ring.op==VSLIDEDOWN && (ring_cnt_q <= 8*NrLanes) && |ring_data_prev_valid_q) begin
       use_fifo_inp = 1'b0;
     end
     
@@ -1057,46 +1095,48 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       // If we are in the same instruction and we expect a fifo packet, only then process a fifo packet
       // Otherwise issue has already gone to the next instruction in which case fifo packets are to be used.
       if (fifo_ring_valid_inp && use_fifo_inp) begin
+            automatic id_lane_t lane_id = sldu_ring_i.dst_lane;
             // We have a valid ring packet
-            ring_data_prev_d = fifo_ring_inp;
-            ring_data_prev_valid_d = 1'b1;
+            ring_data_prev_d[lane_id] = fifo_ring_inp;
+            ring_data_prev_valid_d[lane_id] = 1'b1;
             
             // For the edge clusters, We need to have the current ring packet and the previous ring packet
             if (is_edge_cluster) begin
-              
-              if (ring_data_prev_valid_q) begin
+              if (ring_data_prev_valid_q[lane_id]) begin
+                automatic elen_t ring_data_prev = ring_data_prev_q[lane_id];
                 if (vinsn_ring.op==VSLIDEDOWN) begin 
                   unique case (vinsn_ring.vtype.vsew)
-                    EW64: result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {fifo_ring_inp};
-                    EW32: result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {fifo_ring_inp[31:0],
-                                                                                           ring_data_prev_q[63:32]};
-                    EW16: result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {fifo_ring_inp[15:0],
-                                                                                           ring_data_prev_q[31:16],
-                                                                                           ring_data_prev_q[63:48],
-                                                                                           ring_data_prev_q[47:32]};
-                    EW8 : result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {fifo_ring_inp[7:0], 
-                                                                                           ring_data_prev_q[15:8],
-                                                                                           ring_data_prev_q[31:24], 
-                                                                                           ring_data_prev_q[23:16],
-                                                                                           ring_data_prev_q[63:32]};
+                    EW64: result_queue_d[result_queue_write_pnt_q2][lane_id].wdata = {fifo_ring_inp};
+                    EW32: result_queue_d[result_queue_write_pnt_q2][lane_id].wdata = {fifo_ring_inp[31:0],
+                                                                                           ring_data_prev[63:32]};
+                    EW16: result_queue_d[result_queue_write_pnt_q2][lane_id].wdata = {fifo_ring_inp[15:0],
+                                                                                           ring_data_prev[31:16],
+                                                                                           ring_data_prev[63:48],
+                                                                                           ring_data_prev[47:32]};
+                    EW8 : result_queue_d[result_queue_write_pnt_q2][lane_id].wdata = {fifo_ring_inp[7:0], 
+                                                                                           ring_data_prev[15:8],
+                                                                                           ring_data_prev[31:24], 
+                                                                                           ring_data_prev[23:16],
+                                                                                           ring_data_prev[63:32]};
                   endcase
                 end else begin 
                   unique case (vinsn_ring.vtype.vsew)
-                    EW64: result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {ring_data_prev_q};
-                    EW32: result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {fifo_ring_inp[31:0],
-                                                                                           ring_data_prev_q[63:32]};
-                    EW16: result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {fifo_ring_inp[31:16],
+                    EW64: result_queue_d[result_queue_write_pnt_q2][lane_id].wdata = {ring_data_prev};
+                    EW32: result_queue_d[result_queue_write_pnt_q2][lane_id].wdata = {fifo_ring_inp[31:0],
+                                                                                           ring_data_prev[63:32]};
+                    EW16: result_queue_d[result_queue_write_pnt_q2][lane_id].wdata = {fifo_ring_inp[31:16],
                                                                                            fifo_ring_inp[15:0],
                                                                                            fifo_ring_inp[47:32],
-                                                                                           ring_data_prev_q[63:48]};
-                    EW8 : result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {fifo_ring_inp[31:0],
+                                                                                           ring_data_prev[63:48]};
+                    EW8 : result_queue_d[result_queue_write_pnt_q2][lane_id].wdata = {fifo_ring_inp[31:0],
                                                                                            fifo_ring_inp[15:8],
                                                                                            fifo_ring_inp[7:0], 
                                                                                            fifo_ring_inp[23:16],
-                                                                                           ring_data_prev_q[63:56]};
+                                                                                           ring_data_prev[63:56]};
                   endcase
                 end
-                slide_data_valid = 1'b1;
+                n_ring_in_d = n_ring_in_q - 1;
+                slide_data_valid = (n_ring_in_q == 1) ? 1'b1 : 1'b0;
               end else begin
                 if (vinsn_ring.op==VSLIDEDOWN) begin
                   // Slidedown needs to wait for 1 more ring packet, so don't update pnt
@@ -1104,17 +1144,20 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
                 end else if (vinsn_ring.op==VSLIDEUP) begin
                   // For the 1st packet, we can write only the current ring input and the first 32-bits is filled with scalar op later
                   unique case (vinsn_ring.vtype.vsew)
-                    EW64: result_queue_d[result_queue_write_pnt_q2][0].wdata[63:0]  = {vinsn_ring.scalar_op};
-                    EW32: result_queue_d[result_queue_write_pnt_q2][0].wdata[63:32] = {fifo_ring_inp[31:0]};
-                    EW16: result_queue_d[result_queue_write_pnt_q2][0].wdata[63:16] = {fifo_ring_inp[31:16],
-                                                                                       fifo_ring_inp[15:0],
-                                                                                       fifo_ring_inp[47:32]};
-                    EW8 : result_queue_d[result_queue_write_pnt_q2][0].wdata[63:56] = {fifo_ring_inp[31:0],
-                                                                                       fifo_ring_inp[15:8],
-                                                                                       fifo_ring_inp[7:0], 
-                                                                                       fifo_ring_inp[23:16]};
+                    EW64: ;
+                    EW32: result_queue_d[result_queue_write_pnt_q2][lane_id].wdata[63:32] = {fifo_ring_inp[31:0]};
+                    EW16: result_queue_d[result_queue_write_pnt_q2][lane_id].wdata[63:16] = {fifo_ring_inp[31:16],
+                                                                                             fifo_ring_inp[15:0],
+                                                                                             fifo_ring_inp[47:32]};
+                    EW8 : result_queue_d[result_queue_write_pnt_q2][lane_id].wdata[63:56] = {fifo_ring_inp[31:0],
+                                                                                             fifo_ring_inp[15:8],
+                                                                                             fifo_ring_inp[7:0], 
+                                                                                             fifo_ring_inp[23:16]};
                   endcase
-                  slide_data_valid = 1'b1;
+                  // Update ring pointer
+                  // If all packets received, set result queue to valid
+                  n_ring_in_d = n_ring_in_q - 1;
+                  slide_data_valid = (n_ring_in_q == 1) ? 1'b1 : 1'b0;
                 end
               end
             
@@ -1131,24 +1174,27 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
                 end
               end else begin
                 // Slides for non-edge clusters
-                result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = fifo_ring_inp;
+                result_queue_d[result_queue_write_pnt_q2][lane_id].wdata = fifo_ring_inp;
               end
-              slide_data_valid = 1'b1;
+              n_ring_in_d = n_ring_in_q - 1;
+              slide_data_valid = (n_ring_in_q == 1) ? 1'b1 : 1'b0;
             end
             fifo_ring_ready_out = 1'b1;  // Acknowledge fifo that data has been accepted.
       end else begin
           // For the last data for slide1down use the scalar op
-          if (cluster_id_i == max_cluster_id && vinsn_ring.op==VSLIDEDOWN && (ring_cnt_q <= 8*NrLanes) && ring_data_prev_valid_q) begin
+          if (cluster_id_i == max_cluster_id && vinsn_ring.op==VSLIDEDOWN && (ring_cnt_q <= 8*NrLanes) && |ring_data_prev_valid_q) begin
+            automatic elen_t ring_data_prev = ring_data_prev_q[edge_lane_id];
             unique case (vinsn_ring.vtype.vsew)
               EW64: result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {vinsn_ring.scalar_op};
-              EW32: result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {vinsn_ring.scalar_op[31:0] , ring_data_prev_q[63:32]};
-              EW16: result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {vinsn_ring.scalar_op[15:0] , ring_data_prev_q[31:16], ring_data_prev_q[63:48], ring_data_prev_q[47:32]};
-              EW8 : result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {vinsn_ring.scalar_op[7:0]  , ring_data_prev_q[15:8], ring_data_prev_q[31:24], 
-                                                                                     ring_data_prev_q[23:16], ring_data_prev_q[63:32]};
+              EW32: result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {vinsn_ring.scalar_op[31:0] , ring_data_prev[63:32]};
+              EW16: result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {vinsn_ring.scalar_op[15:0] , ring_data_prev[31:16], ring_data_prev[63:48], ring_data_prev[47:32]};
+              EW8 : result_queue_d[result_queue_write_pnt_q2][edge_lane_id].wdata = {vinsn_ring.scalar_op[7:0]  , ring_data_prev[15:8], ring_data_prev[31:24], 
+                                                                                     ring_data_prev[23:16], ring_data_prev[63:32]};
             endcase
-            slide_data_valid = 1'b1;
+            n_ring_in_d = n_ring_in_q - 1;
+            slide_data_valid = (n_ring_in_q == 1) ? 1'b1 : 1'b0;
             ring_data_prev_d = '0; 
-            ring_data_prev_valid_d = 1'b0;
+            ring_data_prev_valid_d = '0;
           end
       end
     end
@@ -1163,11 +1209,12 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
         result_queue_write_pnt_q1 = '0;
       
       ring_cnt_d = ring_cnt_q - 8*NrLanes;
-      
+      n_ring_in_d = (vinsn_ring.stride >> int'(vinsn_ring.vtype.vsew)) % NrLanes;
+
       // Update counters and pointers
       if (vinsn_ring_valid && ring_cnt_d == '0) begin
         ring_data_prev_d = '0; 
-        ring_data_prev_valid_d = 1'b0;
+        ring_data_prev_valid_d = '0;
             
         vinsn_queue_d.ring_cnt -= 1;
         vinsn_queue_d.ring_pnt += 1;
@@ -1190,8 +1237,12 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
           // Trim vector elements which are not written by the slide unit
           if (vinsn_queue_q.vinsn[vinsn_queue_d.ring_pnt].op == VSLIDEUP)
             ring_cnt_d -= vinsn_queue_q.vinsn[vinsn_queue_d.ring_pnt].stride[$bits(ring_cnt_d)-1:0];
+
+          n_ring_in_d = (vinsn_queue_q.vinsn[vinsn_queue_d.ring_pnt].stride >> int'(vinsn_queue_q.vinsn[vinsn_queue_d.ring_pnt].vtype.vsew)) % NrLanes;
         end
       end
+
+      
     end
 
     //////////////////////////////
@@ -1224,9 +1275,9 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
         // Trim vector elements which are not written by the slide unit
         // VSLIDE1UP always writes at least 1 element
-        if (pe_req_i.op == VSLIDEUP && !pe_req_i.use_scalar_op) begin
-          commit_cnt_d -= vinsn_queue_d.vinsn[vinsn_queue_q.accept_pnt].stride[$bits(commit_cnt_d)-1:0];
-        end
+        // if (pe_req_i.op == VSLIDEUP && !pe_req_i.use_scalar_op) begin
+        //   commit_cnt_d -= vinsn_queue_d.vinsn[vinsn_queue_q.accept_pnt].stride[$bits(commit_cnt_d)-1:0];
+        // end
       end
 
       // Set expected ring counter packets for the instruction
@@ -1243,9 +1294,10 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
         // Trim vector elements which are not written by the slide unit
         // VSLIDE1UP always writes at least 1 element
-        if (pe_req_i.op == VSLIDEUP && !pe_req_i.use_scalar_op) begin
-          ring_cnt_d -= vinsn_queue_d.vinsn[vinsn_queue_q.accept_pnt].stride[$bits(ring_cnt_d)-1:0];
-        end
+        // if (pe_req_i.op == VSLIDEUP && !pe_req_i.use_scalar_op) begin
+        //   ring_cnt_d -= vinsn_queue_d.vinsn[vinsn_queue_q.accept_pnt].stride[$bits(ring_cnt_d)-1:0];
+        // end
+        n_ring_in_d = (vinsn_queue_d.vinsn[vinsn_queue_d.ring_pnt].stride >> int'(vinsn_queue_d.vinsn[vinsn_queue_d.ring_pnt].vtype.vsew)) % NrLanes;
       end
 
       // Bump pointers and counters of the vector instruction queue
