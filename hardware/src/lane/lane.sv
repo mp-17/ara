@@ -138,6 +138,8 @@ module lane import ara_pkg::*; import rvv_pkg::*; #(
     .clk_i                  (clk_i                ),
     .rst_ni                 (rst_ni               ),
     .lane_id_i              (lane_id_i            ),
+    .cluster_id_i           (cluster_id_i         ),
+    .num_clusters_i         (num_clusters_i       ),
     // Interface with the main sequencer
     .pe_req_i               (pe_req_i             ),
     .pe_req_valid_i         (pe_req_valid_i       ),

@@ -36,9 +36,9 @@ extern int vsize;
 
 // #define LDST_TEST  1
 // #define SLIDEDOWN_TEST 1
-// #define SLIDEUP_TEST 1
+#define SLIDEUP_TEST 1
 // #define REDUCTION_TEST 1
-#define COMPARISON_TEST  1
+// #define COMPARISON_TEST  1
 
 #define FP64 1
 // #define FP32 1
@@ -133,6 +133,7 @@ int main() {
 	printf("============Slide1up Test============\n");
 	int vl, avl=vsize;
 	int shift = 0;
+	int offset = 6;
 	T *a_ = (T *) va+shift;
 	T *b_ = (T *) vb;
 
@@ -142,29 +143,33 @@ int main() {
 	asm volatile("vsetvli %0, %1, e64, m4, ta, ma" : "=r"(vl) : "r"(avl)); // FP64
 	printf("vl:%d\n",vl);
 	asm volatile("vle64.v v8,  (%0)" ::"r"(a_));  // FP64
-	asm volatile("vfslide1up.vf v12, v8, %0" ::"f"(scal));
+	// asm volatile("vfslide1up.vf v12, v8, %0" ::"f"(scal));
+	asm volatile("vslideup.vx v12, v8, %0" ::"r"(offset));
 	asm volatile("vse64.v v12,  (%0)" ::"r"(b_));  // FP64
 #elif defined(FP32)
 	asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(vl) : "r"(avl)); // FP32
 	printf("vl:%d\n",vl);
 	asm volatile("vle32.v v8,  (%0)" ::"r"(a_));  // FP32
-	asm volatile("vfslide1up.vf v12, v8, %0" ::"f"(scal));
+	// asm volatile("vfslide1up.vf v12, v8, %0" ::"f"(scal));
+	asm volatile("vslideup.vx v12, v8, %0" ::"r"(offset));
 	asm volatile("vse32.v v12,  (%0)" ::"r"(b_));  // FP32
 #elif defined(FP16)
 	asm volatile("vsetvli %0, %1, e16, m4, ta, ma" : "=r"(vl) : "r"(avl)); // FP16
 	printf("vl:%d\n",vl);
 	asm volatile("vle16.v v8,  (%0)" ::"r"(a_));  // FP16
-	asm volatile("vfslide1up.vf v12, v8, %0" ::"f"(scal));
+	// asm volatile("vfslide1up.vf v12, v8, %0" ::"f"(scal));
+	asm volatile("vslideup.vx v12, v8, %0" ::"r"(offset));
 	asm volatile("vse16.v v12,  (%0)" ::"r"(b_));  // FP16
 #endif
 
-	for (int i=1; i<avl; i++) {
-    if (vb[i] != va[i+shift-1]) {
-			printf("Error idx:%d val:%f exp:%f\n", i, vb[i], va[i+shift-1]);
+	for (int i=0; i<avl; i++) {
+		if ((i >= offset) && (vb[i] != va[i-offset +shift])) {
+				printf("Error idx:%d val:%f exp:%f\n", i, vb[i], va[i-offset +shift]);
 		}
-	}
-	if (vb[0]!=scal) {
-		printf("Error idx:%d val:%f exp:%f\n", 0, vb[0], scal);
+		
+		// if ((i < offset) && (vb[i] != va[i])) {
+		// 	printf("Error idx:%d val:%f exp:%f\n", i, vb[i], va[i]);
+		// }
 	}
 	return 0;
 }

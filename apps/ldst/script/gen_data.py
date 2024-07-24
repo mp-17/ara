@@ -42,6 +42,8 @@ else:
 
 avl = int(vsize) + 10  #adding 10 to test unaligned 
 dtype = np.float64
+# dtype = np.float32
+# dtype = np.float16
 
 # Create the vectors
 va = np.random.rand(avl).astype(dtype)

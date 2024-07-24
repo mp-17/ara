@@ -218,13 +218,16 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
 
   // NP2 Slide support
   logic is_stride_np2;
-  logic [idx_width(idx_width(VLENB << 3)):0] sldu_popc;
+  // logic [idx_width(idx_width(VLENB << 3)):0] sldu_popc;
+  logic [$clog2(NrLanes)-1:0] sldu_popc;
 
   // Is the stride power of two?
   popcount #(
-    .INPUT_WIDTH (idx_width(VLENB << 3))
+    // .INPUT_WIDTH (idx_width(VLENB << 3))
+    .INPUT_WIDTH (2)
   ) i_np2_stride (
-    .data_i    (ara_req_d.stride[idx_width(VLENB << 3)-1:0]),
+    //.data_i    (ara_req_d.stride[idx_width(VLENB << 3)-1:0]),
+    .data_i      (ara_req_d.stride[$clog2(NrLanes)-1:0]    ),
     .popcount_o(sldu_popc                                  )
   );
 

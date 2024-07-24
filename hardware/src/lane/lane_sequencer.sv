@@ -15,6 +15,8 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
     input  logic                                          rst_ni,
     // Lane ID
     input  logic                 [idx_width(NrLanes)-1:0] lane_id_i,
+    input  id_cluster_t                                   cluster_id_i,
+    input  num_cluster_t                                  num_clusters_i,
     // Interface with the main sequencer
     input  pe_req_t                                       pe_req_i,
     input  logic                                          pe_req_valid_i,
@@ -35,6 +37,9 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
     input  logic                                          mfpu_ready_i,
     input  logic                 [NrVInsn-1:0]            mfpu_vinsn_done_i
   );
+
+  id_cluster_t max_cluster_id; 
+  assign max_cluster_id = (1 << num_clusters_i) - 1;
 
   ////////////////////////////
   //  Register the request  //
@@ -543,8 +548,12 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
               // as operands by the slide unit.
               // Since this request goes outside of the lane, we might need to request an
               // extra operand regardless of whether it is valid in this lane or not.
+              
+              // Find the stride within a given cluster
+              automatic vlen_t cluster_stride = pe_req.stride < (NrLanes * (max_cluster_id - cluster_id_i + 1)) ? 
+                                                pe_req.stride - NrLanes * (max_cluster_id - cluster_id_i) : NrLanes;
               operand_request_i[SlideAddrGenA].vl =
-              (pe_req.vl - pe_req.stride + NrLanes - 1) / NrLanes;
+              (pe_req.vl - cluster_stride + NrLanes - 1) / NrLanes;
             end
             VSLIDEDOWN: begin
               // Extra elements to ask, because of the stride
@@ -601,18 +610,21 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
               // as operands by the slide unit.
               // Since this request goes outside of the lane, we might need to request an
               // extra operand regardless of whether it is valid in this lane or not.
+              
+              automatic vlen_t cluster_stride = pe_req.stride < (NrLanes * (max_cluster_id - cluster_id_i + 1)) ? 
+                                                pe_req.stride - NrLanes * (max_cluster_id - cluster_id_i) : NrLanes;
               operand_request_i[MaskM].vl =
-              ((pe_req.vl - pe_req.stride + NrLanes - 1) / 8 / NrLanes)
+              ((pe_req.vl - cluster_stride + NrLanes - 1) / 8 / NrLanes)
               >> int'(pe_req.vtype.vsew);
 
-              if (((operand_request_i[MaskM].vl + pe_req.stride) <<
+              if (((operand_request_i[MaskM].vl + cluster_stride) <<
                     int'(pe_req.vtype.vsew) * NrLanes * 8 != pe_req.vl))
                 operand_request_i[MaskM].vl += 1;
 
               // SLIDEUP only uses mask bits whose indices are > stride
               // Don't send the previous (unused) ones to the MASKU
-              if (pe_req.stride >= NrLanes * 64)
-                operand_request_i[MaskM].vstart += ((pe_req.stride >> NrLanes * 64) << NrLanes * 64) / 8;
+              if (cluster_stride >= NrLanes * 64)
+                operand_request_i[MaskM].vstart += ((cluster_stride >> NrLanes * 64) << NrLanes * 64) / 8;
             end
             VSLIDEDOWN: begin
               // Since this request goes outside of the lane, we might need to request an
