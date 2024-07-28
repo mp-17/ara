@@ -550,6 +550,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
               // extra operand regardless of whether it is valid in this lane or not.
               
               // Find the stride within a given cluster
+              // TODO: To have better logic here - currently only uptil strides of 4
               automatic vlen_t cluster_stride = pe_req.stride < (NrLanes * (max_cluster_id - cluster_id_i + 1)) ? 
                                                 pe_req.stride - NrLanes * (max_cluster_id - cluster_id_i) : NrLanes;
               operand_request_i[SlideAddrGenA].vl =
@@ -563,7 +564,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
 
               // We need to trim full words from the start of the vector that are not used
               // as operands by the slide unit.
-              operand_request_i[SlideAddrGenA].vstart = pe_req.stride / NrLanes;
+              operand_request_i[SlideAddrGenA].vstart = 0; // pe_req.stride / NrLanes;
 
               // The stride move the initial address in boundaries of 8*NrLanes Byte.
               // If the stride is not multiple of a full VRF word (8*NrLanes Byte),
