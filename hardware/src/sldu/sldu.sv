@@ -493,6 +493,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   vlen_t n_ring_in_d, n_ring_in_q;
   logic [$clog2(MaxNrClusters):0] dst_cl;
 
+  logic init_queue_d, init_queue_q;
+
   always_ff @(posedge clk_i or negedge rst_ni) begin : proc_ring
     if(~rst_ni) begin
       ring_data_prev_q       <= '0;
@@ -502,6 +504,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       n_ring_out_q           <= '0;
       n_ring_in_q            <= '0;
       vl_cluster_q           <= '0;
+      init_queue_q           <= 1'b1;
     end else begin
       ring_data_prev_q       <= ring_data_prev_d;
       ring_data_prev_valid_q <= ring_data_prev_valid_d;
@@ -510,6 +513,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       n_ring_out_q           <= n_ring_out_d;
       n_ring_in_q            <= n_ring_in_d;
       vl_cluster_q           <= vl_cluster_d;
+      init_queue_q           <= init_queue_d;  
     end
   end
   
@@ -595,6 +599,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
     sldu_operand_ref_ready = '0;
     vl_cluster_d = vl_cluster_q;
+    
+    init_queue_d = init_queue_q;
 
     /////////////////
     //  Slide FSM  //
@@ -660,6 +666,17 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
               // vslidedown starts writing the destination vector at its beginning
               out_pnt_d = '0;
 
+              if (vinsn_issue_q.stride > ((1 << vinsn_issue_q.vtype.vsew) * NrLanes * cluster_id_i)) begin
+                automatic int offset = vinsn_issue_q.stride - ((1 << vinsn_issue_q.vtype.vsew) * NrLanes * cluster_id_i);
+                in_pnt_d = offset[$clog2(8*NrLanes)-1:0]; // in bytes
+                vrf_pnt_d = offset >> $clog2(8*NrLanes);
+              end else begin
+                 in_pnt_d = '0;
+                 vrf_pnt_d = '0;
+              end
+              n_ring_out_d = (vinsn_issue_q.stride >> int'(vinsn_issue_q.vtype.vsew));
+              n_ring_out_d = n_ring_out_d > NrLanes ? NrLanes : n_ring_out_d;
+
               // Initialize counters
               issue_cnt_d = vinsn_issue_q.vl << int'(vinsn_issue_q.vtype.vsew);
               output_limit_d = issue_cnt_d;
@@ -713,16 +730,21 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
           out_en = out_en_flat & ({8*NrLanes{vinsn_issue_q.vm | (vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu})}} | mask_q);
 
           // Write in the correct bytes
-          for (int lane = 0; lane < NrLanes; lane++)
-            for (int b = 0; b < 8; b++)
-              if (out_en[lane][b]) begin
-                result_queue_d[result_queue_write_pnt_q][lane].wdata[8*b +: 8] = sld_op_dst[lane][8*b +: 8];
-                result_queue_d[result_queue_write_pnt_q][lane].be[b]           = 1'b1;
-              end else begin
-                // Unchanged policy
-                result_queue_d[result_queue_write_pnt_q][lane].wdata[8*b +: 8] = sldu_operand_ref[lane][8*b +: 8];
-                result_queue_d[result_queue_write_pnt_q][lane].be[b]           = 1'b1;
-              end
+          if (init_queue_q) begin
+            // To initialize the queue only once with the local shifted data
+            // The ring data is written later on top of the initialized data
+            for (int lane = 0; lane < NrLanes; lane++)
+              for (int b = 0; b < 8; b++)
+                if (out_en[lane][b]) begin
+                  result_queue_d[result_queue_write_pnt_q][lane].wdata[8*b +: 8] = sld_op_dst[lane][8*b +: 8];
+                  result_queue_d[result_queue_write_pnt_q][lane].be[b]           = 1'b1;
+                end else begin
+                  // Unchanged policy
+                  result_queue_d[result_queue_write_pnt_q][lane].wdata[8*b +: 8] = sldu_operand_ref[lane][8*b +: 8];
+                  result_queue_d[result_queue_write_pnt_q][lane].be[b]           = 1'b1;
+                end
+            init_queue_d = 1'b0;
+          end
 
           // Initialize id and addr fields of the result queue requests
           for (int lane = 0; lane < NrLanes; lane++) begin
@@ -871,6 +893,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
             // Increment VRF address
             vrf_pnt_d = vrf_pnt_q + 1;
+
+            init_queue_d = 1'b1;
 
             issue_cnt_d = issue_cnt_q - 8*NrLanes;
             
@@ -1101,9 +1125,9 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       use_fifo_inp = 1'b0;
     end
     
-    if ((result_queue_cnt_d || issue_cnt_d==0) &&
-        (((vinsn_queue_d.issue_pnt != vinsn_queue_d.ring_pnt) || ((issue_cnt_d < ring_cnt_d) && (vinsn_queue_d.issue_pnt == vinsn_queue_d.ring_pnt))) || 
-        is_ring_reduction)) begin
+    // if ((result_queue_cnt_d || issue_cnt_d==0) &&
+    //     (((vinsn_queue_d.issue_pnt != vinsn_queue_d.ring_pnt) || ((issue_cnt_d < ring_cnt_d) && (vinsn_queue_d.issue_pnt == vinsn_queue_d.ring_pnt))) || 
+    //     is_ring_reduction)) begin
     
     // if (((vinsn_queue_d.issue_pnt != vinsn_queue_d.ring_pnt) || ((issue_cnt_d < ring_cnt_d) && (vinsn_queue_d.issue_pnt == vinsn_queue_d.ring_pnt))) || 
     //     is_ring_reduction) begin
@@ -1116,14 +1140,16 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             ring_data_prev_d[lane_id] = fifo_ring_inp;
             ring_data_prev_valid_d[lane_id] = 1'b1;
 
+            // If nothing in the result queue, then this is the last set of data from ring received.
+            // In this case we need to initialize vrf address and id. And increase result queue counter
             if (!result_queue_cnt_d) begin
-              for (int lane=0; lane < NrLanes; lane++) begin
-                result_queue_d[result_queue_write_pnt_q2][lane].id = vinsn_ring.id;
-                result_queue_d[result_queue_write_pnt_q2][lane].addr = vaddr(vinsn_ring.vd, NrLanes) + vrf_pnt_q;
-                result_queue_d[result_queue_write_pnt_q2][lane].be = '1;
+              for (int l=0; l<NrLanes; l++) begin
+                result_queue_d[result_queue_write_pnt_q2][l].addr = vaddr(vinsn_ring.vd, NrLanes) + vrf_pnt_q;
               end
               result_queue_cnt_d += 1;
             end
+            result_queue_d[result_queue_write_pnt_q2][lane_id].id = vinsn_ring.id;
+            result_queue_d[result_queue_write_pnt_q2][lane_id].be = '1;
             
             // For the edge clusters, We need to have the current ring packet and the previous ring packet
             if (is_edge_cluster) begin
@@ -1222,7 +1248,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             ring_data_prev_valid_d = '0;
           end
       end
-    end
+    // end
 
     // Set the data to valid to be sent to the VRF
     // Update the write_pnt_q2
