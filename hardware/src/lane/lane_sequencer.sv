@@ -554,7 +554,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
               automatic vlen_t cluster_stride = pe_req.stride < (NrLanes * (max_cluster_id - cluster_id_i + 1)) ? 
                                                 pe_req.stride - NrLanes * (max_cluster_id - cluster_id_i) : NrLanes;
               operand_request_i[SlideAddrGenA].vl =
-              (pe_req.vl - cluster_stride + NrLanes - 1) / NrLanes;
+              (pe_req.vl + NrLanes - 1) / NrLanes;
             end
             VSLIDEDOWN: begin
               // Extra elements to ask, because of the stride
