@@ -210,8 +210,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   logic slide_np2_buf_valid_d, slide_np2_buf_valid_q;
   
   // To have a reference data
-  elen_t [NrLanes-1:0] sldu_operand_ref_d, sldu_operand_ref;
-  logic [NrLanes-1:0]  sldu_operand_ref_valid_d, sldu_operand_ref_valid;
+  elen_t [NrLanes-1:0] sldu_operand_ref_d, sldu_operand_ref_q, sldu_operand_ref_p2, sldu_operand_ref;
+  logic [NrLanes-1:0]  sldu_operand_ref_valid_d, sldu_operand_ref_valid_q, sldu_operand_ref_valid;
   logic [NrLanes-1:0]  sldu_operand_ref_ready;
 
   for (genvar l = 0; l < NrLanes; l++) begin
@@ -240,13 +240,25 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       .data_i (sldu_operand_ref_d[l]          ),
       .valid_o(sldu_operand_ref_valid[l]      ),
       .ready_i(sldu_operand_ref_ready[l]      ),
-      .data_o (sldu_operand_ref[l]            )
+      .data_o (sldu_operand_ref_p2[l]            )
     );
+  end
+  
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      sldu_operand_ref_q <= '0;
+      sldu_operand_ref_valid_q <= 1'b0;
+    end else begin
+      sldu_operand_ref_q <= sldu_operand_ref_d;
+      sldu_operand_ref_valid_q <= sldu_operand_ref_valid_d;
+    end
   end
 
   always_comb begin
-    sldu_operand_ref_d = sldu_operand_i;
-    sldu_operand_ref_valid_d = sldu_operand_valid_i;
+    // Tracking a reference to send ring data
+    sldu_operand_ref_d = np2_loop_mux_sel_q == NP2_EXT_SEL ? sldu_operand_d : sldu_operand_ref_q;
+    sldu_operand_ref_valid_d = np2_loop_mux_sel_q == NP2_EXT_SEL ? sldu_operand_valid_d : sldu_operand_ref_valid_q;
+    sldu_operand_ref = vinsn_issue_q.is_stride_np2 ? sldu_operand_ref_d : sldu_operand_ref_p2;
   end
 
   always_comb begin
@@ -416,7 +428,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     SLIDE_NP2_SETUP,
     SLIDE_NP2_RUN,
     SLIDE_NP2_COMMIT,
-    SLIDE_NP2_WAIT
+    SLIDE_NP2_WAIT,
+    SLIDE_LATENCY
   } slide_state_e;
   slide_state_e state_d, state_q;
 
@@ -495,6 +508,10 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
   logic init_queue_d, init_queue_q;
 
+  localparam int unsigned ADD_LATENCY_SLIDE = 4;
+  logic [idx_width(ADD_LATENCY_SLIDE):0] cnt_latency_q, cnt_latency_d;
+  logic use_ack_q, use_ack_d;
+
   always_ff @(posedge clk_i or negedge rst_ni) begin : proc_ring
     if(~rst_ni) begin
       ring_data_prev_q       <= '0;
@@ -506,6 +523,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       vl_cluster_q           <= '0;
       init_queue_q           <= 1'b1;
       src_lane_q             <= '0;
+      cnt_latency_q          <= ADD_LATENCY_SLIDE;
+      use_ack_q              <= 1'b0;
     end else begin
       ring_data_prev_q       <= ring_data_prev_d;
       ring_data_prev_valid_q <= ring_data_prev_valid_d;
@@ -516,6 +535,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       vl_cluster_q           <= vl_cluster_d;
       init_queue_q           <= init_queue_d;  
       src_lane_q             <= src_lane_d;
+      cnt_latency_q          <= cnt_latency_d;
+      use_ack_q              <= use_ack_d;
     end
   end
   
@@ -604,6 +625,9 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     
     init_queue_d = init_queue_q;
     src_lane_d = src_lane_q;
+    
+    cnt_latency_d = cnt_latency_q;
+    use_ack_d = use_ack_q;
 
     /////////////////
     //  Slide FSM  //
@@ -624,6 +648,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
           unique case (vinsn_issue_q.op)
             VSLIDEUP: begin
               automatic int cluster_strides = vinsn_issue_q.stride >> $clog2(8*NrLanes);
+              automatic vlen_t stride = (vinsn_issue_q.stride >> int'(vinsn_issue_q.vtype.vsew));
               // -> Supporting only slides by 1 for now.
               // vslideup starts reading the source operand from its beginning
               in_pnt_d  = '0;
@@ -633,13 +658,21 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
                 automatic int offset = vinsn_issue_q.stride - ((1 << vinsn_issue_q.vtype.vsew) * NrLanes * cluster_id_i);
                 out_pnt_d = offset[$clog2(8*NrLanes)-1:0]; // in bytes
                 // Start writing at the middle of the destination vector
-                vrf_pnt_d = offset >> $clog2(8*NrLanes);
+                //vrf_pnt_d = offset >> $clog2(8*NrLanes);
               end else begin
                  out_pnt_d = '0;
-                 vrf_pnt_d = '0;
+                 //vrf_pnt_d = '0;
               end
-              n_ring_out_d = (vinsn_issue_q.stride >> int'(vinsn_issue_q.vtype.vsew));
-              n_ring_out_d = n_ring_out_d > NrLanes ? NrLanes : n_ring_out_d;
+              vrf_pnt_d = '0;
+              
+              // If the stride is more than 4 but not multiple of 4
+              // Then we have 2 adjacent clusters sending packets to the same destination cluster
+              // In this scenario, the closest cluster can send the next transaction quicker reaching the destination before the farther cluster
+              // This should be avoided. The simple solution is to wait for a few clocks before sending the next set of packets.
+              if ((stride > NrLanes) && (stride[1:0]!=0))
+                use_ack_d = 1'b1;
+
+              n_ring_out_d = stride > NrLanes ? NrLanes : stride;
 
               // Initialize counters
               issue_cnt_d = vinsn_issue_q.vl << int'(vinsn_issue_q.vtype.vsew);
@@ -905,6 +938,10 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
             src_lane_d = '0;
 
+            // Go to an intermediate state
+            if (use_ack_q)
+              state_d = SLIDE_LATENCY;
+
             if (issue_cnt_q <= 8*NrLanes) begin
                 state_d = SLIDE_IDLE;
                 
@@ -936,6 +973,14 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             // Reset the buffer-valid if the buffer is read, by default
             slide_np2_buf_valid_d = 1'b0;
 
+      end
+      SLIDE_LATENCY: begin
+        if (cnt_latency_q) begin
+          cnt_latency_d = cnt_latency_q - 1;
+        end else begin
+          cnt_latency_d = ADD_LATENCY_SLIDE;
+          state_d = SLIDE_RUN;
+        end
       end
       SLIDE_RUN_OSUM: begin
         // Short Note: For ordered sum reduction instruction, only one lane has a valid data, and it is sent to the next lane
@@ -1251,6 +1296,19 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             ring_data_prev_d = '0; 
             ring_data_prev_valid_d = '0;
           end
+
+          if (cluster_id_i == 0 && vinsn_ring.op==VSLIDEUP && (ring_cnt_q <= 8*NrLanes) && |ring_data_prev_valid_q && issue_cnt_q==0) begin
+            for (int l=0; l<NrLanes; l++) begin
+              automatic elen_t ring_data_prev = ring_data_prev_q[l];
+              unique case (vinsn_ring.vtype.vsew)
+                EW64: begin
+                  if (ring_data_prev_valid_q[l])
+                    result_queue_d[result_queue_write_pnt_q2][l].wdata = {ring_data_prev};
+                end
+              endcase
+            end
+            slide_data_valid = 1'b1;
+          end
       end
     // end
 
@@ -1336,10 +1394,10 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
         end
 
         // Trim vector elements which are not written by the slide unit
-        if (pe_req_i.op == VSLIDEUP) 
-          commit_cnt_d -= ((cluster_strides + max_cluster_id - cluster_id_i) >> num_clusters_i) * 8 * NrLanes;
-        if (pe_req_i.op == VSLIDEDOWN)
-          commit_cnt_d -= ((cluster_strides + cluster_id_i) >> num_clusters_i) * 8 * NrLanes;
+        // if (pe_req_i.op == VSLIDEUP) 
+        //   commit_cnt_d -= ((cluster_strides + max_cluster_id - cluster_id_i) >> num_clusters_i) * 8 * NrLanes;
+        // if (pe_req_i.op == VSLIDEDOWN)
+        //   commit_cnt_d -= ((cluster_strides + cluster_id_i) >> num_clusters_i) * 8 * NrLanes;
       end
 
       // Set expected ring counter packets for the instruction
