@@ -489,6 +489,16 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   logic [NrLanes-1:0] slide_data_accepted;
   logic update_inp_op_pnt;
 
+  logic [NrLanes-1:0] is_edge_lane;
+  always_comb begin
+    is_edge_lane = '0;
+    for (int l=0; l<NrLanes; l++) begin
+      automatic vlen_t stride = (vinsn_ring.stride >> vinsn_ring.vtype.vsew);
+      if (stride > (NrLanes*cluster_id_i + l))
+        is_edge_lane[l] = 1'b1;
+    end
+  end
+
   // For inter-cluster reductions
   logic send_data_ring, receive_data_ring;
   cluster_reduction_rx_cnt_t cluster_red_cnt_d, cluster_red_cnt_q;
@@ -508,7 +518,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
   logic init_queue_d, init_queue_q;
 
-  localparam int unsigned ADD_LATENCY_SLIDE = 4;
+  localparam int unsigned ADD_LATENCY_SLIDE = 8;
   logic [idx_width(ADD_LATENCY_SLIDE):0] cnt_latency_q, cnt_latency_d;
   logic use_ack_q, use_ack_d;
 
@@ -649,6 +659,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             VSLIDEUP: begin
               automatic int cluster_strides = vinsn_issue_q.stride >> $clog2(8*NrLanes);
               automatic vlen_t stride = (vinsn_issue_q.stride >> int'(vinsn_issue_q.vtype.vsew));
+              automatic vlen_t eff_stride;
               // -> Supporting only slides by 1 for now.
               // vslideup starts reading the source operand from its beginning
               in_pnt_d  = '0;
@@ -663,7 +674,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
                 out_pnt_d = '0;
                 // vrf_pnt_d = '0;
               end
-              vrf_pnt_d = '0;
+              vrf_pnt_d = vinsn_issue_q.stride >> ($clog2(8*NrLanes) + num_clusters_i);
               
               // If the stride is more than 4 but not multiple of 4
               // Then we have 2 adjacent clusters sending packets to the same destination cluster
@@ -672,7 +683,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
               if ((stride > NrLanes) && (stride[1:0]!=0))
                 use_ack_d = 1'b1;
 
-              n_ring_out_d = stride > NrLanes ? NrLanes : stride;
+              eff_stride = vinsn_issue_q.stride - vrf_pnt_d * (8 * NrLanes >> num_clusters_i);
+              n_ring_out_d = (eff_stride > NrLanes) ? NrLanes : stride;
 
               // Initialize counters
               issue_cnt_d = vinsn_issue_q.vl << int'(vinsn_issue_q.vtype.vsew);
@@ -868,6 +880,10 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
           if (update_inp_op_pnt) begin 
             in_pnt_d    = NrLanes * 8;
             out_pnt_d   = NrLanes * 8;
+            // If no incoming ring packet for this request, can just set result queue to valid
+            if (n_ring_in_q == 0) begin
+              slide_data_valid = 1'b1;
+            end
           end
 
           // In Jump to SLIDE_RUN if stride is P2
@@ -1209,7 +1225,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             result_queue_d[result_queue_write_pnt_q2][lane_id].be = '1;
             
             // For the edge clusters, We need to have the current ring packet and the previous ring packet
-            if (is_edge_cluster) begin
+            // if (is_edge_cluster) begin
+            if (is_edge_lane[lane_id]) begin
               if (ring_data_prev_valid_q[lane_id]) begin
                 automatic elen_t ring_data_prev = ring_data_prev_q[lane_id];
                 if (vinsn_ring.op==VSLIDEDOWN) begin 
@@ -1411,6 +1428,8 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
 
       // Set expected ring counter packets for the instruction
       if (vinsn_queue_d.ring_cnt == '0) begin
+        automatic elen_t stride = vinsn_queue_d.vinsn[vinsn_queue_d.ring_pnt].stride;
+        automatic logic [$clog2(MAXVL/8):0] cluster_strides = stride >> ($clog2(NrLanes * 8) + num_clusters_i);
         automatic elen_t nel = vinsn_queue_d.vinsn[vinsn_queue_d.ring_pnt].stride >> vinsn_queue_d.vinsn[vinsn_queue_d.ring_pnt].vtype.vsew;
         ring_cnt_d = pe_req_i.op inside {VSLIDEUP, VSLIDEDOWN}
                      ? pe_req_i.vl << int'(pe_req_i.vtype.vsew)
@@ -1429,18 +1448,19 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
         //                                     pe_req.stride - NrLanes * (max_cluster_id - cluster_id_i) : NrLanes;
         //   ring_cnt_d -= 
         // end
-        
-        n_ring_in_d = vinsn_queue_d.vinsn[vinsn_queue_d.ring_pnt].stride >> vinsn_queue_d.vinsn[vinsn_queue_d.ring_pnt].vtype.vsew;
-        if (n_ring_in_d > NrLanes) begin
-          if (pe_req_i.op == VSLIDEUP) begin
-            if ((n_ring_in_d >= NrLanes * cluster_id_i) && (n_ring_in_d < NrLanes * (cluster_id_i+1)))
-              n_ring_in_d = NrLanes * (cluster_id_i + 1) - nel;
-          end
-          if (pe_req_i.op == VSLIDEDOWN) begin
-            if ((n_ring_in_d >= NrLanes * (max_cluster_id-cluster_id_i)) && (n_ring_in_d < NrLanes * (max_cluster_id-cluster_id_i+1)))
-              n_ring_in_d = NrLanes * (cluster_id_i + 1) - nel;
-          end
-        end
+ 
+        stride -= cluster_strides * (8 * NrLanes >> num_clusters_i); 
+        n_ring_in_d = stride >> vinsn_queue_d.vinsn[vinsn_queue_d.ring_pnt].vtype.vsew;
+        // if (n_ring_in_d > NrLanes) begin
+        //   if (pe_req_i.op == VSLIDEUP) begin
+        //     if ((n_ring_in_d >= NrLanes * cluster_id_i) && (n_ring_in_d < NrLanes * (cluster_id_i+1)))
+        //       n_ring_in_d = NrLanes * (cluster_id_i + 1) - nel;
+        //   end
+        //   if (pe_req_i.op == VSLIDEDOWN) begin
+        //     if ((n_ring_in_d >= NrLanes * (max_cluster_id-cluster_id_i)) && (n_ring_in_d < NrLanes * (max_cluster_id-cluster_id_i+1)))
+        //       n_ring_in_d = NrLanes * (cluster_id_i + 1) - nel;
+        //   end
+        // end
         n_ring_in_d = n_ring_in_d > NrLanes ? NrLanes : n_ring_in_d;
 
       end
