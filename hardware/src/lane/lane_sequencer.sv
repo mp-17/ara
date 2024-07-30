@@ -550,11 +550,11 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
               // extra operand regardless of whether it is valid in this lane or not.
               
               // Find the stride within a given cluster
-              // TODO: To have better logic here - currently only uptil strides of 4
-              automatic vlen_t cluster_stride = pe_req.stride < (NrLanes * (max_cluster_id - cluster_id_i + 1)) ? 
-                                                pe_req.stride - NrLanes * (max_cluster_id - cluster_id_i) : NrLanes;
+              // TODO: To confirm if it works for all slideups
+              automatic vlen_t cluster_stride = (pe_req.stride << pe_req_i.vtype.vsew) >> ($clog2(8*NrLanes) + num_clusters_i);
+              automatic vlen_t num_el = (cluster_stride * NrLanes * 8) >> pe_req_i.vtype.vsew;
               operand_request_i[SlideAddrGenA].vl =
-              (pe_req.vl + NrLanes - 1) / NrLanes;
+              (pe_req.vl - num_el + NrLanes - 1) / NrLanes;
             end
             VSLIDEDOWN: begin
               // Extra elements to ask, because of the stride
