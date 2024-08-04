@@ -390,6 +390,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
         if (vinsn_issue.vl >= ELEN*NrLanes)
           bit_enable = '1;
         else begin
+          // Generate enable mask corresponding to EW=1 format
           for (int lane=0; lane < NrLanes; lane++) begin
             automatic int nelements = vinsn_issue.vl >> $clog2(NrLanes);
             automatic logic[DataWidth-1:0] bit_enable_lane = '0; 
