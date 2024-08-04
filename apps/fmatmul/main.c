@@ -39,11 +39,11 @@ extern uint64_t P;
 // #define FP32 1
 
 #ifndef FP32
-extern double a[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
-extern double b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
-extern double c[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern double a[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern double b[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern double c[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS), section(".l2")));
 // Gold results
-extern double g[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern double g[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS), section(".l2")));
 
 // Verify the matrix
 int verify_matrix(double *result, double *gold, size_t R, size_t C,
@@ -61,11 +61,11 @@ int verify_matrix(double *result, double *gold, size_t R, size_t C,
 
 #else
 
-extern float a[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
-extern float b[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
-extern float c[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern float a[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern float b[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern float c[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS), section(".l2")));
 // Gold results
-extern float g[] __attribute__((aligned(32 * NR_LANES * NR_CLUSTERS), section(".l2")));
+extern float g[] __attribute__((aligned(4 * NR_LANES * NR_CLUSTERS), section(".l2")));
 
 // Verify the matrix
 int verify_matrix(float *result, float *gold, size_t R, size_t C,
