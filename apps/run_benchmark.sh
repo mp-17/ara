@@ -11,7 +11,7 @@ logdir=logs
 make clean
 mkdir -p ${logdir}/$app
 
-for nr_clusters in 8 #2 4 8
+for nr_clusters in 16 #2 4 8
 do
 for nr_lanes in 4
 do
@@ -30,11 +30,13 @@ echo "C=$nr_clusters L=$nr_lanes LEN=$len"
 # Benchmark parameters
 if [[ $app == "fmatmul" ]]
 then
-  args_app="256 256 $len"
+  #args_app="256 256 $len"
+  args_app="16 16 $len"
   str_app=FMATMUL
 elif [[ $app == "fconv2d" ]]
 then
-  args_app="256 $len 7"
+  #args_app="256 $len 7"
+  args_app="16 $len 7"
   str_app=FCONV2D
 elif [[ $app == "fdotproduct" ]]
 then
@@ -43,12 +45,18 @@ then
 elif [[ $app == "jacobi2d" ]]
 then
   r=$((len+2))
-  args_app="256 $r"
+  #args_app="256 $r"
+  args_app="16 $r"
   str_app=JACOBI2D
 elif [[ $app == "softmax" ]]
 then
-  args_app="64 $len"
+  #args_app="64 $len"
+  args_app="16 $len"
   str_app=SOFTMAX
+elif [[ $app == "exp" ]]
+then
+  args_app="$len"
+  str_app=EXP
 else
   echo "SPECIFY app and dtype as 2 arguments to script!"
 fi
@@ -66,7 +74,7 @@ cp bin/benchmarks.dump bin/${appname}.dump
 
 cd ../hardware/
 logfile=../apps/${logdir}/${app}/${nr_lanes}L_${nr_clusters}C_${bytes_lane}B_${latency}${path}.log
-make sim app=${appname} nr_clusters=$nr_clusters config=${nr_lanes}_lanes #> $logfile &
+make simc app=${appname} nr_clusters=$nr_clusters config=${nr_lanes}_lanes > $logfile &
 cd ../apps
 
 done

@@ -2093,7 +2093,7 @@ package ara_pkg;
     id_cluster_t src_cluster, dst_cluster;
   } remote_data_t;
 
-  function automatic logic find_ring_dir(id_cluster_t src, id_cluster_t dst, num_cluster_t numClusters);
+  function automatic logic find_ring_dir(id_cluster_t src, id_cluster_t dst, logic [cf_math_pkg::idx_width(MaxNrClusters)-1:0] numClusters);
     logic dir = 1'b0;
     if (dst > src) begin
       if ((dst - src) < (numClusters >> 1)) begin
