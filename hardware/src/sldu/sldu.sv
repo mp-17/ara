@@ -644,6 +644,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     n_ring_out_d = n_ring_out_q;
     n_ring_in_d = n_ring_in_q;
     dst_lane = '0;
+    src_lane = '0;
 
     sldu_operand_ref_ready = '0;
     vl_cluster_d = vl_cluster_q;
@@ -695,6 +696,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
                 // vrf_pnt_d = '0;
               end
               vrf_pnt_d = vinsn_issue_q.stride >> ($clog2(8*NrLanes) + num_clusters_i);
+              src_lane_d = '0;
               
               // If the stride is more than 4 but not multiple of 4
               // Then we have 2 adjacent clusters sending packets to the same destination cluster
