@@ -111,7 +111,7 @@ module ara_cluster import ara_pkg::*; import rvv_pkg::*;  #(
   // Some of the macros are almost abutted in the floorplan.
   // Thus, some of the ring interfaces will be extremely close together and will not need an AXI cut.
   // This optimization IS floorplan dependent!
-  localparam bit modulate_ring_cuts = 0;
+  localparam bit modulate_ring_cuts = 1;
 
   // Function to check if an index is in a [NrCluster/2]-wide list
   function automatic bit is_index_in_list(int index, int list[NrClusters/2]);
