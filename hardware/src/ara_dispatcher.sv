@@ -373,9 +373,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
         ara_req_d.eew_vd        = eew_new_buffer_q;
         // Always reshuffle one vreg at a time
         ara_req_d.vl            = VLENB >> ara_req_d.eew_vd;
-        // Vl refers to current system vsew but operand requesters
-        // will fetch from a register with a different eew
-        ara_req_d.scale_vl      = 1'b1;
 
         // Backend ready - Decide what to do next
         if (ara_req_ready_i) begin
@@ -793,10 +790,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.stride        = acc_req_i.rs1;
                     // Encode vslideup/vslide1up on the use_scalar_op field
                     ara_req_d.use_scalar_op = 1'b0;
-                    // Vl refers to current system vsew, but operand requesters
-                    // will fetch bytes from a vreg with a different eew
-                    // i.e., request will need reshuffling
-                    ara_req_d.scale_vl      = 1'b1;
                     // If stride > vl, the vslideup has no effects
                     if (|ara_req_d.stride[$bits(ara_req_d.stride)-1:$bits(csr_vl_q)] ||
                       (vlen_t'(ara_req_d.stride) >= csr_vl_q)) null_vslideup = 1'b1;
@@ -806,8 +799,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.stride        = acc_req_i.rs1;
                     // Encode vslidedown/vslide1down on the use_scalar_op field
                     ara_req_d.use_scalar_op = 1'b0;
-                    // Request will need reshuffling
-                    ara_req_d.scale_vl      = 1'b1;
                   end
                   6'b010000: begin
                     ara_req_d.op = ara_pkg::VADC;
@@ -999,8 +990,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.stride        = {{ELEN{insn.varith_type.rs1[19]}}, insn.varith_type.rs1};
                     // Encode vslideup/vslide1up on the use_scalar_op field
                     ara_req_d.use_scalar_op = 1'b0;
-                    // Request will need reshuffling
-                    ara_req_d.scale_vl      = 1'b1;
                     // If stride > vl, the vslideup has no effects
                     if (|ara_req_d.stride[$bits(ara_req_d.stride)-1:$bits(csr_vl_q)] ||
                       (vlen_t'(ara_req_d.stride) >= csr_vl_q)) null_vslideup = 1'b1;
@@ -1010,8 +999,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.stride        = {{ELEN{insn.varith_type.rs1[19]}}, insn.varith_type.rs1};
                     // Encode vslidedown/vslide1down on the use_scalar_op field
                     ara_req_d.use_scalar_op = 1'b0;
-                    // Request will need reshuffling
-                    ara_req_d.scale_vl      = 1'b1;
                   end
                   6'b010000: begin
                     ara_req_d.op = ara_pkg::VADC;
@@ -1650,8 +1637,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b001110: begin // vslide1up
                     ara_req_d.op      = ara_pkg::VSLIDEUP;
                     ara_req_d.stride  = 1;
-                    // Request will need reshuffling
-                    ara_req_d.scale_vl = 1'b1;
                     // If stride > vl, the vslideup has no effects
                     if (|ara_req_d.stride[$bits(ara_req_d.stride)-1:$bits(csr_vl_q)] ||
                       (vlen_t'(ara_req_d.stride) >= csr_vl_q)) null_vslideup = 1'b1;
@@ -1659,8 +1644,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b001111: begin // vslide1down
                     ara_req_d.op      = ara_pkg::VSLIDEDOWN;
                     ara_req_d.stride  = 1;
-                    // Request will need reshuffling
-                    ara_req_d.scale_vl = 1'b1;
                   end
                   6'b010000: begin // VRXUNARY0
                     // vmv.s.x
@@ -2318,8 +2301,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     6'b001110: begin // vfslide1up
                       ara_req_d.op     = ara_pkg::VSLIDEUP;
                       ara_req_d.stride = 1;
-                    // Request will need reshuffling
-                    ara_req_d.scale_vl = 1'b1;
                     // If stride > vl, the vslideup has no effects
                     if (|ara_req_d.stride[$bits(ara_req_d.stride)-1:$bits(csr_vl_q)] ||
                       (vlen_t'(ara_req_d.stride) >= csr_vl_q)) null_vslideup = 1'b1;
@@ -2327,8 +2308,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     6'b001111: begin // vfslide1down
                       ara_req_d.op     = ara_pkg::VSLIDEDOWN;
                       ara_req_d.stride = 1;
-                    // Request will need reshuffling
-                    ara_req_d.scale_vl = 1'b1;
                     end
                     6'b010000: begin // VRFUNARY0
                       // vmv.s.f
@@ -2731,12 +2710,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
 
             // Wait before acknowledging this instruction
             acc_resp_o.req_ready = 1'b0;
-
-            // vl depends on the EEW encoded in the instruction.
-            // Ara does not reshuffle source vregs upon vector stores,
-            // thus the operand requesters will fetch Bytes referring
-            // to the encoding of the source register
-            ara_req_d.scale_vl = 1'b1;
 
             // These generate a request to Ara's backend
             ara_req_d.vs1       = insn.vmem_type.rd; // vs3 is encoded in the same position as rd

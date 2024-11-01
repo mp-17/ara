@@ -259,18 +259,6 @@ package ara_pkg;
   typedef struct packed {
     ara_op_e op; // Operation
 
-    // Stores and slides do not re-shuffle the
-    // source registers. In these two cases, vl refers
-    // to the target EEW and vtype.vsew, respectively.
-    // Since operand requesters work with the old
-    // eew of the source registers, we should rescale
-    // vl to the old eew to fetch the correct number of Bytes.
-    //
-    // Another solution would be to pass directly the target
-    // eew (vstores) or the vtype.vsew (vslides), but this would
-    // create confusion with the current naming convention
-    logic scale_vl;
-
     // Mask vector register operand
     logic vm;
     rvv_pkg::vew_e eew_vmask;
@@ -304,6 +292,7 @@ package ara_pkg;
     // Destination vector register
     logic [4:0] vd;
     logic use_vd;
+    rvv_pkg::vew_e eew_vd;
 
     // If asserted: vs2 is kept in MulFPU opqueue C, and vd_op in MulFPU A
     logic swap_vs2_vd_op;
@@ -372,9 +361,6 @@ package ara_pkg;
 
     vfu_e vfu; // VFU responsible for handling this instruction
 
-    // Rescale vl taking into account the new and old EEW
-    logic scale_vl;
-
     // The lane that provides the first element of the computation
     logic [$clog2(MaxNrLanes)-1:0] start_lane;
     // The lane that provides the last element of the computation
@@ -411,6 +397,7 @@ package ara_pkg;
     // Destination vector register
     logic [4:0] vd;
     logic use_vd;
+    rvv_pkg::vew_e eew_vd;
 
     // Effective length multiplier
     rvv_pkg::vlmul_e emul;
@@ -1021,7 +1008,6 @@ package ara_pkg;
     logic [4:0] vs; // Vector register operand
 
     logic [$clog2(MAX_LMUL*VLEN/(MaxNrLanes*ELEN))-1:0] words_vreg; // number of VRF words to be fetched
-    logic scale_vl; // Rescale vl taking into account the new and old EEW
 
     resize_e cvt_resize;    // Resizing of FP conversions
 
@@ -1030,6 +1016,7 @@ package ara_pkg;
 
     rvv_pkg::vew_e eew;        // Effective element width
     opqueue_conversion_e conv; // Type conversion
+    vlen_t vrf_addr;
 
     target_fu_e target_fu;     // Target FU of the opqueue (if it is not clear)
 
@@ -1069,6 +1056,7 @@ package ara_pkg;
 
     logic [4:0] vd; // Vector destination register
     logic use_vd;
+    rvv_pkg::vew_e eew_vd; // Effective element width of vd
 
     logic swap_vs2_vd_op; // If asserted: vs2 is kept in MulFPU opqueue C, and vd_op in MulFPU A
 

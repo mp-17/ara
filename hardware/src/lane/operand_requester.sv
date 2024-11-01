@@ -232,9 +232,7 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
     // Address of the next element to be read
     vaddr_t addr;
     // How many elements remain to be read
-    vlen_t len;
-    // Element width
-    vew_e vew;
+    vlen_t vrf_words;
 
     // Hazards between vector instructions
     logic [NrVInsn-1:0] hazard;
@@ -274,10 +272,8 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
       automatic vlen_t               vector_body_length;
       automatic vlen_t               scaled_vector_body_length;
       automatic vlen_t               effective_vector_body_length;
-      automatic vaddr_t              vrf_addr;
 
       automatic elen_t vl_byte;
-      automatic elen_t vstart_byte;
       automatic elen_t vector_body_len_byte;
       automatic elen_t vector_body_len_packets;
 
@@ -299,15 +295,11 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
       operand_queue_cmd_o[requester_index]       = '0;
       operand_queue_cmd_valid_o[requester_index] = 1'b0;
 
-      // Address of the vstart element of the vector in the VRF
-      vrf_addr = vaddr(operand_request_i[requester_index].vs, NrLanes) + (operand_request_i[requester_index].vstart >> (EW64 - operand_request_i[requester_index].eew));
-
       // Init helper variables
       requester_metadata_tmp = '{
         id          : operand_request_i[requester_index].id,
-        addr        : vrf_addr,
-        vrf_words   : operand_request_i[requester_index].vrf_words,
-        vew         : operand_request_i[requester_index].eew,
+        addr        : operand_request_i[requester_index].vrf_addr,
+        vrf_words   : operand_request_i[requester_index].words_vreg,
         hazard      : operand_request_i[requester_index].hazard,
         is_widening : operand_request_i[requester_index].cvt_resize == CVT_WIDE,
         default: '0
@@ -348,7 +340,6 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
           end : waw_counters_update
 
           if (operand_queue_ready_i[requester_index]) begin : op_queue_ready
-            automatic vlen_t num_bytes;
 
             // Operand request
             operand_req[bank][requester_index] = !stall;
@@ -364,11 +355,11 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
               requester_metadata_d.addr = requester_metadata_q.addr + 1'b1;
 
               // We read one vrf word
-              requester_metadata_d.len = requester_metadata_q.len - 1'b1;
+              requester_metadata_d.vrf_words = requester_metadata_q.vrf_words - 1'b1;
             end : op_req_grant
 
             // Finished requesting all the elements
-            if (requester_metadata_d.len == '0) begin : req_finished
+            if (requester_metadata_d.vrf_words == '0) begin : req_finished
               state_d = IDLE;
 
               // Accept a new instruction
